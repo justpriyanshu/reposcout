@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoScout</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1f23; --muted: #6b6f76; --line: #e3e1da;
+    --accent: #2f5d50; --accent-ink: #ffffff; --code: #f1efe9;
+    --critical: #b42318; --major: #c4570c; --minor: #a37b00; --nit: #6b6f76;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141517; --panel: #1c1e21; --ink: #e8e6e1; --muted: #9a9ea6; --line: #2c2f33;
+      --accent: #7fb8a4; --accent-ink: #10221c; --code: #232529;
+      --critical: #ff6b5f; --major: #ff9a4d; --minor: #e5c24a; --nit: #9a9ea6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--accent); }
+  #stats { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 4px; margin: 24px 0 16px; border-bottom: 1px solid var(--line); }
+  nav button { background: none; border: 0; padding: 10px 14px; font: inherit; color: var(--muted);
+               cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  section { display: none; }
+  section.active { display: block; }
+  textarea { width: 100%; min-height: 90px; padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+             background: var(--panel); color: var(--ink); font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+             resize: vertical; }
+  #diff { min-height: 240px; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px;
+             padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary:disabled { opacity: .6; cursor: wait; }
+  select { padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .answer { white-space: pre-wrap; }
+  .sources { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; }
+  .sources li { padding: 4px 0; border-top: 1px dashed var(--line); font-family: ui-monospace, Menlo, monospace; }
+  .sources li.cited::before { content: "● "; color: var(--accent); }
+  .finding { border-left: 3px solid var(--nit); padding: 8px 12px; margin: 12px 0; background: var(--code); border-radius: 0 8px 8px 0; }
+  .finding.critical { border-color: var(--critical); } .finding.major { border-color: var(--major); }
+  .finding.minor { border-color: var(--minor); }
+  .finding .meta { font-size: 12px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+  .finding .title { font-weight: 600; margin: 2px 0; }
+  pre { background: var(--code); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; margin: 8px 0 0; }
+  .finding pre { background: var(--panel); }
+  .error { color: var(--critical); }
+  .result-hit { margin-top: 14px; }
+  .result-hit .meta { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Repo<span>Scout</span></h1>
+    <div id="stats">loading index…</div>
+  </header>
+
+  <nav>
+    <button class="active" data-tab="ask">Ask</button>
+    <button data-tab="review">Review a diff</button>
+    <button data-tab="search">Search</button>
+  </nav>
+
+  <section id="ask" class="active">
+    <textarea id="question" placeholder="Ask about the codebase, e.g. “How are webhook signatures verified?”"></textarea>
+    <div class="row"><button class="primary" id="ask-btn">Ask</button><span class="hint">Ctrl/⌘ + Enter</span></div>
+    <div id="ask-out"></div>
+  </section>
+
+  <section id="review">
+    <textarea id="diff" placeholder="Paste a unified diff (output of git diff)…"></textarea>
+    <div class="row">
+      <button class="primary" id="review-btn">Review</button>
+      <label class="hint">Minimum severity
+        <select id="min-sev"><option>nit</option><option>minor</option><option>major</option><option>critical</option></select>
+      </label>
+    </div>
+    <div id="review-out"></div>
+  </section>
+
+  <section id="search">
+    <textarea id="query" placeholder="Keywords or a description of the code you are looking for"></textarea>
+    <div class="row"><button class="primary" id="search-btn">Search</button></div>
+    <div id="search-out"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+async function post(url, body) {
+  const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || (data.detail && JSON.stringify(data.detail)) || resp.statusText);
+  return data;
+}
+function showError(target, err) { target.replaceChildren(el("div", "card error", err.message)); }
+async function withButton(btn, fn) {
+  btn.disabled = true; const label = btn.textContent; btn.textContent = "Working…";
+  try { await fn(); } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+document.querySelectorAll("nav button").forEach((btn) => btn.addEventListener("click", () => {
+  document.querySelectorAll("nav button, section").forEach((n) => n.classList.remove("active"));
+  btn.classList.add("active"); $(btn.dataset.tab).classList.add("active");
+}));
+
+fetch("/stats").then((r) => r.json()).then((s) => {
+  const i = s.index || {};
+  $("stats").textContent = `${i.files || 0} files · ${i.chunks || 0} chunks · ${s.llm || "no LLM"}`;
+}).catch(() => { $("stats").textContent = "stats unavailable"; });
+
+$("ask-btn").addEventListener("click", () => withButton($("ask-btn"), async () => {
+  const out = $("ask-out");
+  try {
+    const data = await post("/ask", { question: $("question").value });
+    const card = el("div", "card");
+    card.append(el("div", "answer", data.answer));
+    if (data.sources.length) {
+      const list = el("ul", "sources");
+      data.sources.forEach((s) => {
+        const li = el("li", data.cited.includes(s.ref) ? "cited" : "",
+          `[${s.ref}] ${s.path}:${s.start_line}-${s.end_line}${s.name ? "  " + s.name : ""}`);
+        list.append(li);
+      });
+      card.append(list);
+    }
+    card.append(el("div", "hint", `${data.latency_ms} ms`));
+    out.replaceChildren(card);
+  } catch (err) { showError(out, err); }
+}));
+
+$("review-btn").addEventListener("click", () => withButton($("review-btn"), async () => {
+  const out = $("review-out");
+  try {
+    const data = await post("/review", { diff: $("diff").value, min_severity: $("min-sev").value });
+    const card = el("div", "card");
+    card.append(el("div", "", data.headline));
+    Object.entries(data.file_summaries || {}).forEach(([path, summary]) =>
+      card.append(el("div", "hint", `${path}: ${summary}`)));
+    data.findings.forEach((f) => {
+      const box = el("div", `finding ${f.severity}`);
+      box.append(el("div", "meta", `${f.severity} · ${f.category} · ${f.path}:${f.line} · ${f.source}`));
+      box.append(el("div", "title", f.title));
+      box.append(el("div", "", f.message));
+      if (f.suggestion) box.append(el("pre", "", f.suggestion));
+      card.append(box);
+    });
+    card.append(el("div", "hint", `${data.stats.latency_ms} ms · ${data.stats.llm_calls} LLM call(s)`));
+    out.replaceChildren(card);
+  } catch (err) { showError(out, err); }
+}));
+
+$("search-btn").addEventListener("click", () => withButton($("search-btn"), async () => {
+  const out = $("search-out");
+  try {
+    const data = await post("/search", { query: $("query").value, k: 8 });
+    const card = el("div", "card");
+    if (!data.results.length) card.append(el("div", "hint", "No matches."));
+    data.results.forEach((r) => {
+      const hit = el("div", "result-hit");
+      hit.append(el("div", "meta", `${r.path}:${r.start_line}-${r.end_line}${r.name ? "  " + r.name : ""}`));
+      hit.append(el("pre", "", r.text.split("\n").slice(0, 14).join("\n")));
+      card.append(hit);
+    });
+    out.replaceChildren(card);
+  } catch (err) { showError(out, err); }
+}));
+
+[["question", "ask-btn"], ["diff", "review-btn"], ["query", "search-btn"]].forEach(([input, btn]) =>
+  $(input).addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") $(btn).click(); }));
+</script>
+</body>
+</html>
