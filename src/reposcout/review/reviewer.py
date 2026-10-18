@@ -24,12 +24,21 @@ log = logging.getLogger(__name__)
 
 REVIEW_SYSTEM_PROMPT = """You are a meticulous senior engineer reviewing one file of a pull request.
 
-Focus on problems that matter, in this order: bugs and incorrect logic, security issues,
-missing error handling, concurrency/resource leaks, performance problems, then
-maintainability. Only flag style when it hurts readability badly.
+Look for problems that matter, in this order: bugs and incorrect logic (including crashes
+on edge cases such as empty, None or zero inputs), security issues, missing error handling
+that loses data or hides failures, concurrency/resource leaks, and real performance problems.
 
 Rules:
 - Only comment on ADDED lines (marked "+"). Use the exact line number printed on the left.
+- Only report problems this change introduces or makes worse. Removed lines ("-") show the
+  old code: if the old code already behaved the same way, it is not a finding.
+- One finding per root cause. Do not report the same problem again on a neighbouring line
+  or split it into several findings.
+- Do NOT report missing type hints, missing docstrings, naming, formatting, or input
+  validation that is not needed for correct behaviour. Clean, correct changes get none.
+- Severity: critical = security hole, data loss, or crash on normal input; major = wrong
+  result or crash on an edge case; minor = risky but works in common cases; nit = style.
+- If your summary mentions a problem, it must also be in the findings list.
 - "Related code" is from the rest of the repository; use it to understand the change
   (signatures, callers, conventions) but do not review it.
 - Every finding must be specific and actionable. No praise, no generic advice, no
@@ -113,6 +122,7 @@ NOT_SYMBOLS = {
     "TypeError",
     "KeyError",
 }
+NEARBY_LINES = 1
 SEVERITY_ICON = {"critical": "🔴", "major": "🟠", "minor": "🟡", "nit": "⚪"}
 
 
@@ -444,7 +454,11 @@ class Reviewer:
         return "\n\n".join(blocks)
 
     def _finalise(self, findings: list[Finding], stats: ReviewStats) -> list[Finding]:
-        """Drop low-severity noise, merge duplicates (rules win ties), cap per file."""
+        """Drop low-severity noise, merge duplicates (rules win ties), cap per file.
+
+        Models often restate one problem as a second, weaker finding on the same or the
+        next line ("bare except" + "empty pass"). A finding within NEARBY_LINES of a
+        strictly more severe one is treated as a restatement and dropped."""
         best: dict[tuple[str, int, str], Finding] = {}
         for f in findings:
             if f.severity.rank < self.min_severity.rank:
@@ -462,4 +476,16 @@ class Reviewer:
             if better:
                 best[key] = f
         ordered = sorted(best.values(), key=lambda f: (-f.severity.rank, f.line))
-        return ordered[: self.max_findings_per_file]
+        kept: list[Finding] = []
+        for f in ordered:
+            restated = any(
+                k.path == f.path
+                and abs(k.line - f.line) <= NEARBY_LINES
+                and k.severity.rank > f.severity.rank
+                for k in kept
+            )
+            if restated:
+                stats.duplicates_removed += 1
+                continue
+            kept.append(f)
+        return kept[: self.max_findings_per_file]

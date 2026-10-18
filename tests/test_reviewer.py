@@ -154,3 +154,50 @@ def test_extract_json_variants():
     assert extract_json('Here you go: {"a": 3} hope it helps') == {"a": 3}
     assert extract_json('[{"line": 1}]') == [{"line": 1}]
     assert extract_json("no json here") is None
+
+
+def test_weaker_restatement_on_neighbouring_line_is_dropped():
+    diff = """--- a/app/sync.py
++++ b/app/sync.py
+@@ -1,2 +1,4 @@
+ def sync(client):
+     try:
+         client.push()
++    except:
++        pass
+"""
+    llm = FakeLLM(
+        findings_reply(
+            [
+                finding(4, severity="major", category="bug", title="Errors are swallowed"),
+                finding(5, severity="minor", category="maintainability", title="Empty pass statement"),
+            ]
+        )
+    )
+    result = Reviewer(llm).review(diff)
+    titles = [f.title for f in result.findings]
+    assert "Empty pass statement" not in titles
+    assert result.stats.duplicates_removed >= 1
+
+
+def test_separate_problems_of_equal_severity_on_neighbouring_lines_are_kept():
+    llm = FakeLLM(
+        findings_reply(
+            [
+                finding(9, severity="major", category="bug", title="Rounding removed"),
+                finding(10, severity="major", category="performance", title="Query per item"),
+            ]
+        )
+    )
+    result = Reviewer(llm).review(DIFF)
+    titles = {f.title for f in result.findings}
+    assert {"Rounding removed", "Query per item"} <= titles
+
+
+def test_review_prompt_discourages_noise():
+    from reposcout.review.reviewer import REVIEW_SYSTEM_PROMPT
+
+    prompt = REVIEW_SYSTEM_PROMPT.format(max_findings=6)
+    assert "Only report problems this change introduces" in prompt
+    assert "One finding per root cause" in prompt
+    assert "missing type hints" in prompt
