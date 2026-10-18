@@ -18,7 +18,12 @@ Rules:
 - Mention file paths and function names so the reader can find the code.
 - If the snippets do not contain the answer, say clearly that you could not find it in the
   indexed code, and suggest what to search for instead.
-- Be concise: a short explanation, then a small code excerpt only if it helps."""
+- Be concise: a short explanation, then a small code excerpt only if it helps.
+- For follow-up questions, use the earlier conversation to work out what "it" or "that"
+  refers to, but answer from the snippets."""
+
+HISTORY_TURNS = 2
+HISTORY_ANSWER_CHARS = 1200
 
 NO_RESULTS_ANSWER = (
     "I couldn't find anything relevant in the indexed repository. "
@@ -76,7 +81,9 @@ class RepoAssistant:
         llm: LLM | None,
         top_k: int = 8,
         max_context_chars: int = 24_000,
+        repo_name: str | None = None,
     ):
+        self.repo_name = repo_name
         self.store = store
         self.embedder = embedder
         self.llm = llm
@@ -97,10 +104,16 @@ class RepoAssistant:
         vector = self.embedder.embed([query])[0]
         return self.store.hybrid_search(query, vector, k=k or self.top_k, exclude_paths=exclude_paths)
 
-    def ask(self, question: str, k: int | None = None) -> Answer:
+    def ask(self, question: str, k: int | None = None, history: list[dict] | None = None) -> Answer:
+        """Answer ``question``. ``history`` holds earlier turns as
+        ``{"question": ..., "answer": ...}`` dicts, oldest first, for follow-up questions."""
         started = time.perf_counter()
         question = question.strip()
-        results = self.search(question, k)
+        turns = [t for t in (history or []) if t.get("question")][-HISTORY_TURNS:]
+        # A follow-up like "where is it called?" retrieves badly on its own, so search
+        # with the previous question too.
+        query = f"{turns[-1]['question']} {question}" if turns else question
+        results = self.search(query, k)
         if not results:
             return Answer(question, NO_RESULTS_ANSWER, latency_ms=_ms(started), used_llm=False)
 
@@ -122,7 +135,17 @@ class RepoAssistant:
                 used_llm=False,
             )
 
-        prompt = f"Code snippets from the repository:\n\n{context}\n\nQuestion: {question}"
+        parts = []
+        if self.repo_name:
+            parts.append(f"Repository: {self.repo_name}")
+        parts.append(f"Code snippets from the repository:\n\n{context}")
+        if turns:
+            earlier = "\n\n".join(
+                f"Q: {t['question']}\nA: {str(t.get('answer', ''))[:HISTORY_ANSWER_CHARS]}" for t in turns
+            )
+            parts.append(f"Earlier in this conversation:\n{earlier}")
+        parts.append(f"Question: {question}")
+        prompt = "\n\n".join(parts)
         text = self.llm.complete(QA_SYSTEM_PROMPT, prompt, temperature=0.1).strip()
         cited = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text) if 0 < int(n) <= len(sources)})
         return Answer(question, text, sources, cited, latency_ms=_ms(started))

@@ -44,3 +44,17 @@ def test_search_rejects_mismatched_embedder(indexed):
     store, _ = indexed
     with pytest.raises(IndexMismatchError):
         RepoAssistant(store, HashingEmbedder(dim=64), None).search("total")
+
+
+def test_follow_up_questions_use_the_conversation(indexed):
+    store, embedder = indexed
+    llm = FakeLLM("It is called from the login view [1].")
+    assistant = RepoAssistant(store, embedder, llm, repo_name="octo/shop")
+    history = [{"question": "How is the session token verified?", "answer": "By verify_token [1]."}]
+    answer = assistant.ask("Where is it called?", history=history)
+    _, prompt, _ = llm.calls[0]
+    assert "Repository: octo/shop" in prompt
+    assert "Earlier in this conversation" in prompt and "By verify_token" in prompt
+    assert prompt.rstrip().endswith("Question: Where is it called?")
+    # Retrieval used the previous question, so the token code is found for a vague follow-up.
+    assert answer.sources[0].path == "auth/session.py"
