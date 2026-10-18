@@ -1,0 +1,29 @@
+# docker compose up -d
+# docker compose exec ollama ollama pull nomic-embed-text
+# docker compose exec ollama ollama pull qwen2.5-coder:7b
+# docker compose exec reposcout reposcout index
+# Then open http://localhost:8000
+services:
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  reposcout:
+    build: .
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${REPO_TO_INDEX:-.}:/repo
+    environment:
+      REPOSCOUT_OLLAMA_URL: http://ollama:11434
+      REPOSCOUT_LLM_MODEL: ${REPOSCOUT_LLM_MODEL:-qwen2.5-coder:7b}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      REPOSCOUT_WEBHOOK_SECRET: ${REPOSCOUT_WEBHOOK_SECRET:-}
+
+volumes:
+  ollama:
