@@ -14,6 +14,7 @@ import queue
 import shutil
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 from collections import OrderedDict
@@ -89,36 +90,41 @@ GIT_SAFE = ["-c", "core.symlinks=false", "-c", "advice.detachedHead=false", "-c"
 def _run_watched(
     cmd: list[str], cwd: Path | None, watch: Path, max_bytes: int, timeout: float, stdin: bytes | None = None
 ) -> subprocess.CompletedProcess:
-    """Run git, killing its whole process group if it runs too long or writes too much."""
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        env={**os.environ, **GIT_ENV},
-        stdin=subprocess.PIPE if stdin else subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
-    if stdin:
-        proc.stdin.write(stdin)
-        proc.stdin.close()
-    deadline = time.monotonic() + timeout
-    try:
-        while proc.poll() is None:
-            if time.monotonic() > deadline:
-                raise RepoLimitError("Downloading the repository took too long; it may be too large.")
-            if watch.exists() and _folder_size(watch) > max_bytes:
-                raise RepoLimitError(
-                    f"This repository is larger than the {max_bytes // 1_000_000} MB this server can handle."
-                )
-            time.sleep(0.5)
-    except RepoLimitError:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, 9)
-        proc.wait()
-        raise
-    out, err = proc.communicate()
-    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+    """Run git, killing its whole process group if it runs too long or writes too much.
+
+    Input and error output go through temporary files rather than pipes, so a chatty git
+    can never block on a full pipe while we wait for it."""
+    with tempfile.TemporaryFile() as stdin_file, tempfile.TemporaryFile() as stderr_file:
+        if stdin:
+            stdin_file.write(stdin)
+            stdin_file.seek(0)
+        proc = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env={**os.environ, **GIT_ENV},
+            stdin=stdin_file if stdin else subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=stderr_file,
+            start_new_session=True,
+        )
+        deadline = time.monotonic() + timeout
+        try:
+            while proc.poll() is None:
+                if time.monotonic() > deadline:
+                    raise RepoLimitError("Downloading the repository took too long; it may be too large.")
+                if watch.exists() and _folder_size(watch) > max_bytes:
+                    raise RepoLimitError(
+                        f"This repository is larger than the {max_bytes // 1_000_000} MB this server can handle."
+                    )
+                time.sleep(0.5)
+        except RepoLimitError:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, 9)
+            proc.wait()
+            raise
+        stderr_file.seek(0)
+        err = stderr_file.read()
+    return subprocess.CompletedProcess(cmd, proc.returncode, b"", err)
 
 
 def git_clone(
