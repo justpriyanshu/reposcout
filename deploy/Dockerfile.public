@@ -1,0 +1,22 @@
+# Image for the public web app. Runs as an unprivileged user, so even a bug in the app or
+# in git can't touch anything outside /data.
+FROM python:3.12-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --create-home --shell /usr/sbin/nologin reposcout \
+    && mkdir -p /data && chown reposcout:reposcout /data
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+USER reposcout
+ENV REPOSCOUT_DATA_DIR=/data \
+    PYTHONUNBUFFERED=1
+VOLUME ["/data"]
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
+CMD ["reposcout", "serve-public", "--host", "0.0.0.0", "--port", "8000"]
