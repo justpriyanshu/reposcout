@@ -9,3 +9,7 @@ venv/
 .ruff_cache/
 dist/
 build/
+
+# Server settings for the public deployment
+deploy/public.env
+eval-runs/

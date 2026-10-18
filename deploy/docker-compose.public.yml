@@ -1,0 +1,74 @@
+# Public RepoScout: anyone can explore public GitHub repos with their own API key.
+#
+#   cp deploy/public.env.example deploy/public.env   # then set DOMAIN
+#   docker compose -f deploy/docker-compose.public.yml up -d --build
+#
+# Services:
+#   caddy      HTTPS on ports 80/443 with a free, auto-renewed Let's Encrypt certificate
+#   reposcout  the app (one process: the rate limiter and indexing queue live in memory)
+#   ollama     local embedding model used to index repositories
+#   ollama-init  one-off job that downloads the embedding model, then exits
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: public.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - reposcout
+
+  reposcout:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.public
+    restart: unless-stopped
+    # Keeps a runaway job from taking the whole machine down with it.
+    mem_limit: ${REPOSCOUT_MEM_LIMIT:-1500m}
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    command: ["reposcout", "serve-public", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: public.env
+    environment:
+      REPOSCOUT_DATA_DIR: /data
+      REPOSCOUT_OLLAMA_URL: http://ollama:11434
+      REPOSCOUT_EMBED_PROVIDER: ollama
+      REPOSCOUT_EMBED_MODEL: nomic-embed-text
+      REPOSCOUT_TRUST_PROXY: "1"
+    volumes:
+      - reposcout_data:/data
+    expose:
+      - "8000"
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    expose:
+      - "11434"
+
+  ollama-init:
+    image: ollama/ollama
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 3 && ollama pull nomic-embed-text"]
+    depends_on:
+      - ollama
+    restart: "no"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  reposcout_data:
+  ollama:

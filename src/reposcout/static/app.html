@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoScout</title>
+<meta name="description" content="Ask questions about any public GitHub repository and get AI reviews of pull requests.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F6B57'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M19 19l6 6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F2F4F3;
+  --panel: #FFFFFF;
+  --sunken: #E9EDEB;
+  --ink: #16201C;
+  --ink-2: #4A5752;
+  --muted: #6B7873;
+  --line: #D9E0DC;
+  --accent: #1F6B57;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #DCEDE6;
+  --focus: #1F6B57;
+  --critical: #B42318; --critical-soft: #FDE8E6;
+  --major: #B54708;    --major-soft: #FDEFE1;
+  --minor: #8A6A00;    --minor-soft: #FBF3D5;
+  --nit: #5B6670;      --nit-soft: #ECEFF1;
+  --ok: #1F7A4D;
+  --sans: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 32, 28, .06), 0 8px 24px -12px rgba(16, 32, 28, .18);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0E1412; --panel: #151D1A; --sunken: #1B2521; --ink: #E4EBE7; --ink-2: #B9C5BF;
+    --muted: #8B9892; --line: #26322D; --accent: #6FCBAE; --accent-ink: #0B1F18; --accent-soft: #1C3A30;
+    --focus: #6FCBAE;
+    --critical: #FF8A7E; --critical-soft: #3A1C19; --major: #FFB067; --major-soft: #3A2716;
+    --minor: #E8C547; --minor-soft: #352E12; --nit: #A8B3BC; --nit-soft: #242B30; --ok: #6FD39C;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+code, pre, .mono { font-family: var(--mono); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- top bar ---------- */
+.topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(8px); border-bottom: 1px solid var(--line); }
+.topbar-inner { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 700; font-size: 1.12rem; letter-spacing: -.01em; }
+.brand svg { flex: none; }
+.spacer { flex: 1; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line);
+  background: var(--panel); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 500; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--sunken); }
+.btn.small { padding: 5px 10px; font-size: .88rem; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.key-pill { display: inline-flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--major); flex: none; }
+.dot.on { background: var(--ok); }
+.key-pill .label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.key-pill .short { display: none; }
+@media (max-width: 560px) { .key-pill .label { display: none; } .key-pill .short { display: inline; } }
+
+main { max-width: 1180px; margin: 0 auto; padding: 0 16px 80px; }
+main:focus { outline: none; }
+
+/* ---------- home ---------- */
+.home { max-width: 760px; margin: 0 auto; padding-top: 9vh; }
+.home h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.08; letter-spacing: -.03em; margin: 0 0 14px; font-weight: 700; }
+.home .lede { color: var(--ink-2); font-size: 1.13rem; margin: 0 0 30px; max-width: 600px; }
+.linkbox { background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 8px; display: flex; gap: 8px; align-items: center; transition: border-color .15s; }
+.linkbox:focus-within { border-color: var(--accent); }
+.linkbox svg { margin-left: 10px; flex: none; color: var(--muted); }
+.linkbox input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-family: var(--mono); font-size: 1rem; padding: 12px 4px; }
+.detect { min-height: 28px; margin: 10px 4px 0; font-size: .92rem; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: .82rem; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+.tag.warn { background: var(--major-soft); color: var(--major); }
+.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; color: var(--muted); font-size: .92rem; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-family: var(--mono); font-size: .84rem; color: var(--ink-2); }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin: 48px 0 0; padding: 22px 0 0; border-top: 1px solid var(--line); }
+.how h3 { margin: 0 0 4px; font-size: 1rem; }
+.how p { margin: 0; color: var(--ink-2); font-size: .93rem; }
+@media (max-width: 640px) { .how { grid-template-columns: 1fr; gap: 14px; } }
+.recent { margin-top: 44px; }
+.recent h2 { font-size: 1rem; margin: 0 0 10px; color: var(--ink-2); font-weight: 600; }
+.repo-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+.repo-list li + li { border-top: 1px solid var(--line); }
+.repo-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 12px 16px; text-decoration: none; color: var(--ink); }
+.repo-row:hover { background: var(--sunken); }
+.repo-row .name { font-weight: 600; font-family: var(--mono); font-size: .93rem; overflow-wrap: anywhere; }
+.repo-row .desc { grid-column: 1; color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-row .meta { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--muted); font-size: .85rem; display: flex; gap: 12px; align-items: center; }
+.status { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--sunken); color: var(--ink-2); }
+.status.ready { background: var(--accent-soft); color: var(--accent); }
+.status.failed { background: var(--critical-soft); color: var(--critical); }
+.empty-note { color: var(--muted); font-size: .92rem; padding: 14px 16px; }
+
+/* ---------- repo layout ---------- */
+.repo-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; padding-top: 24px; }
+@media (max-width: 860px) { .repo-layout { grid-template-columns: 1fr; gap: 14px; padding-top: 14px; } }
+.side { align-self: start; position: sticky; top: 76px; }
+@media (max-width: 860px) { .side { position: static; } }
+.side .repo-name { font-family: var(--mono); font-weight: 600; font-size: 1rem; overflow-wrap: anywhere; margin: 0 0 6px; }
+.side .repo-name a { color: var(--ink); text-decoration: none; }
+.side .repo-name a:hover { text-decoration: underline; }
+.side .desc { color: var(--ink-2); font-size: .92rem; margin: 0 0 12px; }
+.facts { list-style: none; padding: 0; margin: 0 0 14px; font-size: .88rem; color: var(--muted); display: grid; gap: 4px; }
+.facts b { color: var(--ink-2); font-weight: 600; }
+.tabs { display: grid; gap: 2px; margin: 0 0 14px; }
+@media (max-width: 860px) { .tabs { grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--sunken); padding: 3px; border-radius: 9px; } }
+.tab { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: var(--ink-2); text-decoration: none; font-weight: 500; }
+.tab:hover { background: var(--sunken); color: var(--ink); }
+.tab[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+@media (max-width: 860px) { .tab { justify-content: center; padding: 7px 8px; font-size: .92rem; } .tab svg { display: none; } .tab[aria-current="page"] { background: var(--panel); } }
+.side-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) { .side .desc, .side .facts { display: none; } .side-actions { display: none; } }
+
+/* ---------- progress ---------- */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
+.progress-card { max-width: 620px; }
+.progress-card h2 { margin: 0 0 4px; font-size: 1.25rem; }
+.progress-card p { margin: 0 0 18px; color: var(--ink-2); }
+.bar { height: 8px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+.bar.indeterminate > span { width: 35% !important; animation: slide 1.3s ease-in-out infinite; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+.steps { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; font-size: .94rem; }
+.steps li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.steps li .mark { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; font-size: 11px; }
+.steps li.done { color: var(--ink-2); }
+.steps li.done .mark { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.steps li.now { color: var(--ink); font-weight: 600; }
+.steps li.now .mark { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.banner { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-size: .92rem; margin-bottom: 14px; }
+.banner.error { background: var(--critical-soft); color: var(--critical); }
+
+/* ---------- chat ---------- */
+.chat { display: flex; flex-direction: column; min-height: calc(100vh - 120px); }
+.thread { flex: 1; display: flex; flex-direction: column; gap: 22px; padding-bottom: 20px; }
+.msg-user { align-self: flex-end; max-width: 80%; background: var(--accent); color: var(--accent-ink); padding: 10px 14px; border-radius: 14px 14px 4px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-bot { max-width: 100%; }
+.msg-bot .body { background: var(--panel); border: 1px solid var(--line); border-radius: 4px 14px 14px 14px; padding: 14px 18px; overflow-wrap: anywhere; }
+.msg-bot .foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: .84rem; color: var(--muted); }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.src { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); font: 500 .8rem var(--mono); color: var(--ink-2); text-decoration: none; }
+.src:hover { border-color: var(--accent); color: var(--accent); }
+.src .n { font-weight: 700; color: var(--accent); }
+.src.uncited { opacity: .72; }
+.src .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cite { display: inline-block; min-width: 1.35em; padding: 0 .3em; margin: 0 1px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font: 600 .78em var(--mono); text-align: center; text-decoration: none; vertical-align: .08em; }
+.thinking { display: inline-flex; gap: 5px; padding: 6px 2px; }
+.thinking i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+.thinking i:nth-child(2) { animation-delay: .2s; } .thinking i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0 0; }
+@media (max-width: 560px) { .starters { grid-template-columns: 1fr; } }
+.starter { text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; color: var(--ink-2); }
+.starter:hover { border-color: var(--accent); color: var(--ink); }
+.chat-empty h2 { font-size: 1.35rem; margin: 6px 0 4px; letter-spacing: -.01em; }
+.chat-empty p { color: var(--ink-2); margin: 0 0 12px; }
+.composer { position: sticky; bottom: 0; padding: 12px 0 16px; background: linear-gradient(to bottom, transparent, var(--bg) 22%); }
+.composer form { display: flex; gap: 8px; align-items: flex-end; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 8px; box-shadow: var(--shadow); }
+.composer form:focus-within { border-color: var(--accent); }
+.composer textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 8px 8px; max-height: 200px; line-height: 1.5; }
+.composer .hint { font-size: .8rem; color: var(--muted); margin: 6px 6px 0; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- markdown ---------- */
+.md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 .8em; }
+.md h1, .md h2, .md h3, .md h4 { font-size: 1.02rem; margin: 1.1em 0 .45em; }
+.md ul, .md ol { margin: 0 0 .8em; padding-left: 1.35em; }
+.md li { margin: .2em 0; }
+.md code { font-size: .86em; background: var(--sunken); padding: .1em .35em; border-radius: 5px; }
+.md pre { background: var(--sunken); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; overflow-x: auto; font-size: .84rem; line-height: 1.55; margin: 0 0 .9em; }
+.md pre code { background: none; padding: 0; font-size: inherit; }
+.md table { border-collapse: collapse; margin: 0 0 .9em; font-size: .9rem; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+.md th { background: var(--sunken); }
+.md blockquote { margin: 0 0 .8em; padding-left: 12px; border-left: 3px solid var(--line); color: var(--ink-2); }
+
+/* ---------- search ---------- */
+.searchbar { display: flex; gap: 8px; margin-bottom: 18px; }
+.searchbar input { flex: 1; min-width: 0; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel); }
+.searchbar input:focus { border-color: var(--accent); outline: 0; }
+.hit { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); margin-bottom: 12px; overflow: hidden; }
+.hit header { display: flex; justify-content: space-between; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.hit header a { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; }
+.hit header span { color: var(--muted); white-space: nowrap; }
+.hit pre { margin: 0; padding: 12px 14px; font-size: .82rem; line-height: 1.55; overflow-x: auto; background: var(--sunken); }
+
+/* ---------- review ---------- */
+.review-head { padding-top: 26px; }
+.crumbs { font-size: .9rem; color: var(--muted); margin-bottom: 8px; }
+.crumbs a { color: var(--muted); }
+.review-head h1 { font-size: clamp(1.4rem, 3vw, 1.9rem); line-height: 1.2; letter-spacing: -.02em; margin: 0 0 8px; overflow-wrap: anywhere; }
+.review-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: .92rem; align-items: center; }
+.plus { color: var(--ok); font-weight: 600; } .minus { color: var(--critical); font-weight: 600; }
+.verdict { margin: 22px 0 16px; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.verdict .big { font-size: 1.12rem; font-weight: 700; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.sev-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; font-size: .86rem; cursor: pointer; font-weight: 600; }
+.sev-btn[aria-pressed="false"] { opacity: .5; }
+.sev-critical { color: var(--critical); } .sev-major { color: var(--major); } .sev-minor { color: var(--minor); } .sev-nit { color: var(--nit); }
+.file-group { margin: 0 0 18px; }
+.file-group h3 { font: 600 .92rem var(--mono); margin: 0 0 4px; overflow-wrap: anywhere; }
+.file-group .summary { color: var(--muted); font-size: .9rem; margin: 0 0 10px; }
+.finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 9px; background: var(--panel); padding: 12px 16px; margin-bottom: 10px; }
+.finding.critical { border-left-color: var(--critical); } .finding.major { border-left-color: var(--major); }
+.finding.minor { border-left-color: var(--minor); } .finding.nit { border-left-color: var(--nit); }
+.finding .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.finding .title { font-weight: 600; }
+.badge { font-size: .74rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; text-transform: capitalize; }
+.badge.critical { background: var(--critical-soft); color: var(--critical); } .badge.major { background: var(--major-soft); color: var(--major); }
+.badge.minor { background: var(--minor-soft); color: var(--minor); } .badge.nit { background: var(--nit-soft); color: var(--nit); }
+.finding .where { margin-left: auto; font: 500 .82rem var(--mono); }
+.finding p { margin: 6px 0 0; color: var(--ink-2); }
+.finding pre { margin: 10px 0 0; background: var(--sunken); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: .82rem; }
+.finding .by { margin-top: 8px; font-size: .78rem; color: var(--muted); }
+.clean { text-align: center; padding: 36px 16px; }
+.clean .big { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
+.pr-form { display: flex; gap: 8px; max-width: 560px; }
+.pr-form input { flex: 1; min-width: 0; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel); font-family: var(--mono); }
+.pr-form input:focus { border-color: var(--accent); outline: 0; }
+
+/* ---------- dialog, toast ---------- */
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(520px, calc(100vw - 32px)); background: var(--panel); color: var(--ink); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45); }
+dialog::backdrop { background: rgba(10, 18, 15, .5); }
+.dlg { padding: 22px; }
+.dlg h2 { margin: 0 0 6px; font-size: 1.2rem; }
+.dlg .sub { margin: 0 0 18px; color: var(--ink-2); font-size: .95rem; }
+.field { display: grid; gap: 6px; margin-bottom: 14px; }
+.field label { font-weight: 600; font-size: .92rem; }
+.field .row { display: flex; gap: 8px; }
+.field input[type=password], .field input[type=text], .field select { flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--bg); }
+.field input:focus, .field select:focus { border-color: var(--accent); outline: 0; }
+.field .help { font-size: .84rem; color: var(--muted); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: .92rem; margin: 4px 0 14px; }
+.privacy { font-size: .84rem; color: var(--muted); background: var(--sunken); border-radius: 9px; padding: 10px 12px; margin: 0 0 18px; }
+.dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.field-msg { font-size: .86rem; min-height: 1.2em; }
+.field-msg.ok { color: var(--ok); } .field-msg.err { color: var(--critical); }
+#toasts { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; width: min(520px, calc(100vw - 32px)); }
+.toast { background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 10px; box-shadow: var(--shadow); display: flex; gap: 12px; align-items: center; justify-content: space-between; font-size: .94rem; }
+.toast button { background: none; border: 0; color: inherit; cursor: pointer; font-weight: 700; text-decoration: underline; }
+.loading-center { display: grid; place-items: center; padding: 60px 0; color: var(--muted); }
+footer.site { max-width: 1180px; margin: 0 auto; padding: 0 16px 28px; color: var(--muted); font-size: .84rem; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#/" aria-label="RepoScout home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="14" cy="14" r="6.5" fill="none" stroke="var(--accent-ink)" stroke-width="3"/><path d="M19 19l6 6" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round"/></svg>
+      RepoScout
+    </a>
+    <span class="spacer"></span>
+    <button class="btn key-pill" id="keyBtn" type="button"><span class="dot" id="keyDot"></span><span class="label" id="keyLabel">Add API key</span><span class="short" id="keyShort">Add key</span></button>
+  </div>
+</header>
+
+<main id="view" tabindex="-1"></main>
+<footer class="site">RepoScout reads public code only. Your API key stays in your browser and is sent only with your own requests.</footer>
+<div id="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <form class="dlg" method="dialog" id="settingsForm">
+    <h2 id="settingsTitle">Your API key</h2>
+    <p class="sub" id="settingsSub">RepoScout uses your own free <span data-provider>Groq</span> key to answer questions and review code.</p>
+    <div class="field">
+      <label for="keyInput"><span data-provider>Groq</span> API key</label>
+      <div class="row">
+        <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="gsk_...">
+        <button class="btn" type="button" id="toggleKey" aria-label="Show key">Show</button>
+      </div>
+      <span class="help">Don't have one? <a id="keyLink" href="https://console.groq.com/keys" target="_blank" rel="noopener">Create a free key</a> (takes a minute).</span>
+    </div>
+    <div class="field">
+      <label for="modelSelect">Model</label>
+      <div class="row">
+        <select id="modelSelect"><option value="">Check your key to load models</option></select>
+        <button class="btn" type="button" id="checkKey">Check key</button>
+      </div>
+      <span class="field-msg" id="keyMsg" aria-live="polite"></span>
+    </div>
+    <label class="check"><input type="checkbox" id="rememberKey"> <span>Remember on this device. Leave unticked on shared computers; the key is then forgotten when you close the tab.</span></label>
+    <p class="privacy">Your key never gets saved on the server. It's sent over HTTPS with each request you make and used only for that request.</p>
+    <div class="dlg-actions">
+      <button class="btn ghost" type="button" id="forgetKey">Remove key</button>
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" type="button" id="saveKey">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+/* ================================================================ utilities */
+const $ = (sel, root = document) => root.querySelector(sel);
+function h(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c.nodeType ? c : String(c));
+  return node;
+}
+const icon = (d, size = 18) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("width", size); s.setAttribute("height", size); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none");
+  s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "2"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
+  s.setAttribute("aria-hidden", "true"); s.innerHTML = d; return s; };
+const ICONS = {
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  review: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4"/><path d="m13 4-2 2 2 2"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  ext: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+};
+const store = {
+  get(k, session = false) { try { return JSON.parse((session ? sessionStorage : localStorage).getItem(k)); } catch { return null; } },
+  set(k, v, session = false) { try { (session ? sessionStorage : localStorage).setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch {} },
+};
+function toast(message, action) {
+  const el = h("div", { class: "toast" }, h("span", {}, message));
+  if (action) el.append(h("button", { type: "button", onclick: () => { el.remove(); action.run(); } }, action.label));
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), action ? 9000 : 6000);
+}
+const fmt = (n) => Number(n || 0).toLocaleString();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ================================================================ settings / key */
+const settings = {
+  get key() { return store.get("rs.key") || store.get("rs.key", true) || ""; },
+  get model() { return store.get("rs.model") || store.get("rs.model", true) || ""; },
+  get remember() { return !!store.get("rs.key"); },
+  save(key, model, remember) {
+    store.del("rs.key"); store.del("rs.model");
+    if (key) { store.set("rs.key", key, !remember); store.set("rs.model", model, !remember); }
+    updateKeyPill();
+  },
+};
+let CONFIG = { provider: "Groq", key_url: "https://console.groq.com/keys", default_model: "" };
+function updateKeyPill() {
+  const has = !!settings.key;
+  $("#keyDot").classList.toggle("on", has);
+  $("#keyLabel").textContent = has ? `${CONFIG.provider} · ${settings.model || CONFIG.default_model || "default model"}` : "Add API key";
+  $("#keyShort").textContent = has ? "Key" : "Add key";
+  $("#keyBtn").setAttribute("aria-label", has ? "API key settings" : "Add your API key");
+}
+let afterSettings = null;
+function openSettings(message, then) {
+  afterSettings = then || null;
+  $("#keyInput").value = settings.key;
+  $("#rememberKey").checked = settings.remember;
+  const sel = $("#modelSelect");
+  sel.replaceChildren(h("option", { value: settings.model || "" }, settings.model || "Check your key to load models"));
+  $("#keyMsg").textContent = message || ""; $("#keyMsg").className = "field-msg" + (message ? " err" : "");
+  $("#settings").showModal();
+  setTimeout(() => $("#keyInput").focus(), 30);
+}
+async function loadModels() {
+  const key = $("#keyInput").value.trim();
+  const msg = $("#keyMsg");
+  if (!key) { msg.textContent = "Paste your key first."; msg.className = "field-msg err"; return false; }
+  msg.textContent = "Checking…"; msg.className = "field-msg";
+  try {
+    const data = await api("/api/models", { method: "POST", key });
+    const sel = $("#modelSelect"); const want = settings.model || data.default;
+    sel.replaceChildren(...data.models.map((m) => h("option", { value: m, selected: m === want }, m)));
+    msg.textContent = `Key works. ${data.models.length} models available.`; msg.className = "field-msg ok";
+    return true;
+  } catch (err) { msg.textContent = err.message; msg.className = "field-msg err"; return false; }
+}
+$("#keyBtn").addEventListener("click", () => openSettings());
+$("#toggleKey").addEventListener("click", () => {
+  const input = $("#keyInput"); const show = input.type === "password";
+  input.type = show ? "text" : "password"; $("#toggleKey").textContent = show ? "Hide" : "Show";
+});
+$("#checkKey").addEventListener("click", loadModels);
+$("#saveKey").addEventListener("click", async () => {
+  const key = $("#keyInput").value.trim();
+  if (key && !$("#modelSelect").value) { if (!(await loadModels())) return; }
+  settings.save(key, $("#modelSelect").value, $("#rememberKey").checked);
+  $("#settings").close();
+  if (key) toast("Key saved.");
+  const next = afterSettings; afterSettings = null;
+  if (key && next) next();
+});
+$("#forgetKey").addEventListener("click", () => { settings.save("", "", false); $("#keyInput").value = ""; $("#settings").close(); toast("Key removed from this browser."); });
+
+/* ================================================================ API */
+class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+async function api(path, { method = "GET", body, key, withKey = false } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  const k = key || (withKey ? settings.key : "");
+  if (k) headers["X-LLM-Key"] = k;
+  if (withKey && settings.model) headers["X-LLM-Model"] = settings.model;
+  let resp;
+  try { resp = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined }); }
+  catch { throw new ApiError(0, "network", "Can't reach the server. Check your connection and try again."); }
+  let data = {};
+  try { data = await resp.json(); } catch {}
+  if (!resp.ok) {
+    let message = data.error || (Array.isArray(data.detail) ? "Please check what you typed." : `Something went wrong (${resp.status}).`);
+    throw new ApiError(resp.status, data.code || "error", message);
+  }
+  return data;
+}
+function handleError(err, retry) {
+  if (err.code === "no_key" || err.code === "bad_key" || err.code === "bad_model") {
+    openSettings(err.message, retry);
+  } else {
+    toast(err.message, retry ? { label: "Retry", run: retry } : null);
+  }
+}
+
+/* ================================================================ markdown (safe) */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function inline(text) {
+  // text is already escaped; add code, bold, italics and safe links
+  const codes = [];
+  text = text.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return `\u0000${codes.length - 1}\u0000`; });
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+  text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+  text = text.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
+  return text;
+}
+function markdown(src) {
+  const out = []; const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  let i = 0, para = [], list = null;
+  const flushPara = () => { if (para.length) { out.push(`<p>${inline(esc(para.join(" ")))}</p>`); para = []; } };
+  const flushList = () => { if (list) { out.push(`<${list.tag}>${list.items.map((x) => `<li>${inline(esc(x))}</li>`).join("")}</${list.tag}>`); list = null; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```\s*([\w+-]*)/);
+    if (fence) {
+      flushPara(); flushList(); const code = []; i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i++]);
+      i++; out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
+      flushPara(); flushList();
+      const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(esc(c.trim())));
+      const head = cells(line); i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) { flushPara(); flushList(); out.push(`<h3>${inline(esc(heading[2]))}</h3>`); i++; continue; }
+    const item = line.match(/^\s*(?:([-*+])|(\d+)[.)])\s+(.*)$/);
+    if (item) {
+      flushPara(); const tag = item[1] ? "ul" : "ol";
+      if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+      list.items.push(item[3]); i++; continue;
+    }
+    if (/^\s*>\s?/.test(line)) { flushPara(); flushList(); out.push(`<blockquote>${inline(esc(line.replace(/^\s*>\s?/, "")))}</blockquote>`); i++; continue; }
+    if (!line.trim()) { flushPara(); flushList(); i++; continue; }
+    if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += " " + line.trim(); i++; continue; }
+    flushList(); para.push(line.trim()); i++;
+  }
+  flushPara(); flushList();
+  return out.join("");
+}
+function renderAnswer(text, sources) {
+  const wrap = h("div", { class: "md" }); wrap.innerHTML = markdown(text);
+  const byRef = Object.fromEntries((sources || []).map((s) => [s.ref, s]));
+  const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
+  const nodes = []; while (walker.nextNode()) if (!walker.currentNode.parentElement.closest("pre, code")) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    if (!/\[\d+\]/.test(node.nodeValue)) continue;
+    const frag = document.createDocumentFragment();
+    node.nodeValue.split(/(\[\d+\])/).forEach((part) => {
+      const m = part.match(/^\[(\d+)\]$/);
+      if (m && byRef[m[1]]) { const s = byRef[m[1]];
+        frag.append(h("a", { class: "cite", href: s.url, target: "_blank", rel: "noopener", title: `${s.path}:${s.start_line}-${s.end_line}` }, m[1]));
+      } else frag.append(part);
+    });
+    node.replaceWith(frag);
+  }
+  return wrap;
+}
+
+/* ================================================================ links */
+function parseLink(text) {
+  const v = (text || "").trim().replace(/\/+$/, "");
+  let m = v.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})(\/.*)?$/i);
+  if (m) { const name = m[2].replace(/\.git$/i, ""); const pr = (m[3] || "").match(/^\/pulls?\/(\d+)/);
+    return { owner: m[1], name, pull: pr ? +pr[1] : null }; }
+  m = v.match(/^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})(?:#(\d+))?$/);
+  if (m) return { owner: m[1], name: m[2].replace(/\.git$/i, ""), pull: m[3] ? +m[3] : null };
+  return null;
+}
+const repoHash = (o, n, tab = "") => `#/r/${encodeURIComponent(o)}/${encodeURIComponent(n)}${tab ? "/" + tab : ""}`;
+const prHash = (o, n, num) => `#/pr/${encodeURIComponent(o)}/${encodeURIComponent(n)}/${num}`;
+
+/* ================================================================ router */
+let cleanup = [];
+function onLeave(fn) { cleanup.push(fn); }
+function route() {
+  cleanup.forEach((fn) => fn()); cleanup = [];
+  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent).filter(Boolean);
+  const view = $("#view");
+  view.replaceChildren();
+  if (parts[0] === "r" && parts.length >= 3) return viewRepo(view, parts[1], parts[2], parts[3] || "ask");
+  if (parts[0] === "pr" && parts.length >= 4) return viewReview(view, parts[1], parts[2], parts[3]);
+  return viewHome(view);
+}
+window.addEventListener("hashchange", () => { route(); $("#view").focus({ preventScroll: true }); window.scrollTo(0, 0); });
+
+/* ================================================================ home */
+const EXAMPLES = ["pallets/flask", "psf/requests", "tiangolo/fastapi", "osm-search/Nominatim"];
+function viewHome(view) {
+  document.title = "RepoScout";
+  const input = h("input", { id: "linkInput", type: "text", inputmode: "url", autocomplete: "off", spellcheck: "false",
+    placeholder: "https://github.com/owner/repo  or a pull request link", "aria-label": "GitHub repository or pull request link" });
+  const detect = h("div", { class: "detect", "aria-live": "polite" });
+  const go = h("button", { class: "btn primary", type: "submit" }, "Go");
+  const update = () => {
+    const link = parseLink(input.value); detect.replaceChildren();
+    if (!input.value.trim()) { go.textContent = "Go"; return; }
+    if (!link) { detect.append(h("span", { class: "tag warn" }, "Not a GitHub link yet")); go.textContent = "Go"; return; }
+    if (link.pull) { detect.append(h("span", { class: "tag" }, `Pull request #${link.pull}`), ` in ${link.owner}/${link.name}`); go.textContent = "Review"; }
+    else { detect.append(h("span", { class: "tag" }, "Repository"), ` ${link.owner}/${link.name}`); go.textContent = "Explore"; }
+  };
+  input.addEventListener("input", update);
+  const form = h("form", { class: "linkbox", onsubmit: (e) => { e.preventDefault(); submitLink(input.value); } },
+    icon(ICONS.link, 20), input, go);
+  const recentList = h("ul", { class: "repo-list" }, h("li", { class: "empty-note" }, "Loading…"));
+  view.append(h("section", { class: "home" },
+    h("h1", {}, "Understand any GitHub repo in minutes."),
+    h("p", { class: "lede" }, "Paste a public repository to ask questions about its code, or a pull request to get a careful review. Answers point to the exact lines on GitHub."),
+    form, detect,
+    h("div", { class: "examples" }, "Try:", ...EXAMPLES.map((ex) => h("button", { class: "chip", type: "button", onclick: () => { input.value = `https://github.com/${ex}`; update(); input.focus(); } }, ex))),
+    h("div", { class: "how" },
+      h("div", {}, h("h3", {}, "Ask about the code"), h("p", {}, "“Where is authentication handled?” Get an answer with links to the lines it came from.")),
+      h("div", {}, h("h3", {}, "Review pull requests"), h("p", {}, "Fixed checks for secrets and unsafe code, plus an AI review that reads the code around the change.")),
+      h("div", {}, h("h3", {}, "Free to use"), h("p", {}, ["Bring your own free ", CONFIG.provider, " API key. It never leaves your browser except with your own requests."]))),
+    h("section", { class: "recent", "aria-labelledby": "recentTitle" }, h("h2", { id: "recentTitle" }, "Recently explored"), recentList)));
+  setTimeout(() => input.focus(), 0);
+  api("/api/repos").then(({ repos }) => {
+    recentList.replaceChildren();
+    if (!repos.length) { recentList.append(h("li", { class: "empty-note" }, "Nothing yet. Be the first: paste a repository link above.")); return; }
+    for (const r of repos) recentList.append(h("li", {}, h("a", { class: "repo-row", href: repoHash(r.owner, r.name) },
+      h("span", { class: "name" }, r.full_name),
+      h("span", { class: "desc" }, r.description || (r.ready ? `${fmt(r.files_total)} files indexed` : r.stage)),
+      h("span", { class: "meta" }, r.language ? h("span", {}, r.language) : null, r.stars ? h("span", {}, `★ ${fmt(r.stars)}`) : null,
+        h("span", { class: "status " + (r.ready ? "ready" : r.status === "failed" ? "failed" : "") }, r.ready ? "Ready" : r.status === "failed" ? "Failed" : "Indexing")))));
+  }).catch(() => recentList.replaceChildren(h("li", { class: "empty-note" }, "Couldn't load the list.")));
+}
+async function submitLink(text) {
+  const link = parseLink(text);
+  if (!link) { toast("Paste a link like https://github.com/owner/repo"); return; }
+  if (link.pull) { openReview(link.owner, link.name, link.pull); return; }
+  location.hash = repoHash(link.owner, link.name);
+}
+
+/* ================================================================ repo */
+async function viewRepo(view, owner, name, tab) {
+  document.title = `${owner}/${name} · RepoScout`;
+  view.append(h("div", { class: "loading-center" }, "Loading…"));
+  let record;
+  try {
+    record = (await api(`/api/repos/${owner}/${name}`)).repo;
+  } catch (err) {
+    if (err.status !== 404) { view.replaceChildren(errorCard(err.message, () => route())); return; }
+    try { record = (await api("/api/repos", { method: "POST", body: { url: `${owner}/${name}` } })).repo; }
+    catch (e) { view.replaceChildren(errorCard(e.message, () => route())); return; }
+  }
+  if (!record.ready) return showProgress(view, owner, name, record);
+  renderRepo(view, record, tab);
+}
+function errorCard(message, retry) {
+  return h("div", { class: "card progress-card", style: "margin-top:32px" }, h("h2", {}, "Something went wrong"), h("p", {}, message),
+    h("div", { class: "side-actions", style: "display:flex" }, retry ? h("button", { class: "btn primary", onclick: retry }, "Try again") : null, h("a", { class: "btn", href: "#/" }, "Back to start")));
+}
+const STEPS = [["queued", "Waiting for a free slot"], ["cloning", "Downloading the code"], ["indexing", "Reading and indexing files"], ["ready", "Ready to explore"]];
+function showProgress(view, owner, name, record) {
+  const title = h("h2", {}, `Getting ${record.full_name} ready`);
+  const text = h("p", {}, "This happens once per repository. Small projects take under a minute; larger ones a few minutes. You can leave this page open.");
+  const bar = h("div", { class: "bar indeterminate" }, h("span", { style: "width:0%" }));
+  const steps = h("ul", { class: "steps" });
+  const card = h("div", { class: "card progress-card", style: "margin-top:32px", "aria-live": "polite" }, title, text, bar, steps);
+  view.replaceChildren(card);
+  let stopped = false; onLeave(() => { stopped = true; });
+  const paint = (r) => {
+    if (r.status === "failed") {
+      view.replaceChildren(h("div", { class: "card progress-card", style: "margin-top:32px" },
+        h("h2", {}, `Couldn't index ${r.full_name}`), h("p", {}, r.error || "Indexing failed."),
+        h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+          h("button", { class: "btn primary", onclick: async () => { try { await api("/api/repos", { method: "POST", body: { url: `${owner}/${name}`, refresh: true } }); route(); } catch (e) { handleError(e); } } }, "Try again"),
+          h("a", { class: "btn", href: "#/" }, "Try another repository"))));
+      stopped = true; return;
+    }
+    const order = STEPS.map((s) => s[0]); const at = Math.max(0, order.indexOf(r.status));
+    steps.replaceChildren(...STEPS.map(([key, label], i) => h("li", { class: i < at ? "done" : i === at ? "now" : "" },
+      h("span", { class: "mark" }, i < at ? "✓" : ""), i === at && key === "indexing" && r.files_total ? `${label} (${fmt(r.files_done)} of ${fmt(r.files_total)})` : i === at && key === "queued" && r.queue_position > 1 ? `${label} (number ${r.queue_position} in line)` : label)));
+    if (r.status === "indexing" && r.files_total) { bar.classList.remove("indeterminate"); bar.firstChild.style.width = `${Math.round((100 * r.files_done) / r.files_total)}%`; }
+    else bar.classList.add("indeterminate");
+  };
+  paint(record);
+  (async () => {
+    while (!stopped) {
+      await sleep(1500); if (stopped) return;
+      try { const { repo } = await api(`/api/repos/${owner}/${name}`); if (repo.ready) { route(); return; } paint(repo); }
+      catch { /* keep polling */ }
+    }
+  })();
+}
+function renderRepo(view, r, tab) {
+  const commit = (r.commit_sha || "").slice(0, 7);
+  const ghUrl = `https://github.com/${r.full_name}`;
+  const tabLink = (key, label, ic) => h("a", { class: "tab", href: repoHash(r.owner, r.name, key === "ask" ? "" : key), "aria-current": tab === key ? "page" : null }, icon(ic), label);
+  const refresh = h("button", { class: "btn small", type: "button", onclick: async () => {
+    try { await api("/api/repos", { method: "POST", body: { url: r.full_name, refresh: true } }); toast("Refreshing the index in the background. You can keep asking meanwhile."); }
+    catch (e) { handleError(e); } } }, "Refresh index");
+  const side = h("aside", { class: "side" },
+    h("p", { class: "repo-name" }, h("a", { href: ghUrl, target: "_blank", rel: "noopener" }, r.full_name)),
+    r.description ? h("p", { class: "desc" }, r.description) : null,
+    h("ul", { class: "facts" },
+      r.branch || commit ? h("li", {}, h("b", {}, "Code: "), `${r.branch || "default branch"}${commit ? " @ " + commit : ""}`) : null,
+      h("li", {}, h("b", {}, "Indexed: "), `${fmt(r.files_total)} files, ${fmt(r.chunks)} sections`),
+      r.language ? h("li", {}, h("b", {}, "Language: "), r.language) : null),
+    h("nav", { class: "tabs", "aria-label": "Repository tools" }, tabLink("ask", "Ask", ICONS.chat), tabLink("search", "Find code", ICONS.search), tabLink("review", "Review a PR", ICONS.review)),
+    h("div", { class: "side-actions" }, refresh, h("a", { class: "btn small", href: ghUrl, target: "_blank", rel: "noopener" }, "GitHub ", icon(ICONS.ext, 14))));
+  const content = h("section", { "aria-label": "Workspace" });
+  const banner = r.status !== "ready" ? h("div", { class: "banner" }, "Refreshing the index in the background. Answers use the previous version until it's done.") : r.error ? h("div", { class: "banner error" }, `Last refresh failed: ${r.error}`) : null;
+  if (banner) content.append(banner);
+  view.replaceChildren(h("div", { class: "repo-layout" }, side, content));
+  if (tab === "search") return tabSearch(content, r);
+  if (tab === "review") return tabReview(content, r);
+  return tabAsk(content, r);
+}
+
+/* ---------- ask ---------- */
+const STARTERS = ["What does this project do, and how is it organised?", "Where is the main entry point?", "How is configuration loaded?", "How are errors handled?"];
+function tabAsk(content, r) {
+  const chatKey = `rs.chat.${r.key}`;
+  let turns = store.get(chatKey) || [];
+  const thread = h("div", { class: "thread", "aria-live": "polite" });
+  const textarea = h("textarea", { rows: "1", placeholder: `Ask about ${r.name}…`, "aria-label": "Your question", maxlength: "2000" });
+  const sendBtn = h("button", { class: "btn primary", type: "submit", "aria-label": "Send" }, icon(ICONS.send, 16));
+  const clearBtn = h("button", { class: "btn ghost small", type: "button", onclick: () => { turns = []; store.set(chatKey, turns); paint(); textarea.focus(); } }, "Clear chat");
+  const form = h("form", { onsubmit: (e) => { e.preventDefault(); send(textarea.value); } }, textarea, sendBtn);
+  const grow = () => { textarea.style.height = "auto"; textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px"; };
+  textarea.addEventListener("input", grow);
+  textarea.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
+  content.append(h("div", { class: "chat" }, thread,
+    h("div", { class: "composer" }, form, h("div", { class: "hint" }, h("span", {}, "Enter to send · Shift+Enter for a new line"), clearBtn))));
+  function botBubble(turn) {
+    const body = h("div", { class: "body" });
+    if (turn.pending) body.append(h("span", { class: "thinking", "aria-label": "Thinking" }, h("i"), h("i"), h("i")));
+    else if (turn.error) body.append(h("p", { style: "margin:0;color:var(--critical)" }, turn.error), h("button", { class: "btn small", style: "margin-top:10px", onclick: () => { turns.pop(); paint(); send(turn.question); } }, "Try again"));
+    else {
+      body.append(renderAnswer(turn.answer, turn.sources));
+      if (turn.sources && turn.sources.length) body.append(h("div", { class: "sources" }, ...turn.sources.map((s) =>
+        h("a", { class: "src" + ((turn.cited || []).includes(s.ref) ? "" : " uncited"), href: s.url, target: "_blank", rel: "noopener", title: s.name ? `${s.kind} ${s.name}` : s.path },
+          h("span", { class: "n" }, s.ref), h("span", { class: "path" }, `${s.path}:${s.start_line}-${s.end_line}`)))));
+    }
+    const foot = turn.pending || turn.error ? null : h("div", { class: "foot" },
+      turn.model ? h("span", {}, turn.model) : null, turn.latency_ms ? h("span", {}, `${(turn.latency_ms / 1000).toFixed(1)}s`) : null,
+      h("button", { class: "btn ghost small", type: "button", onclick: (e) => { navigator.clipboard?.writeText(turn.answer).then(() => { e.target.textContent = "Copied"; }); } }, "Copy"));
+    return h("div", { class: "msg-bot" }, body, foot);
+  }
+  function paint() {
+    thread.replaceChildren();
+    if (!turns.length) {
+      thread.append(h("div", { class: "chat-empty" }, h("h2", {}, `Ask anything about ${r.name}`),
+        h("p", {}, "Answers come from the indexed code and link to the exact lines on GitHub."),
+        h("div", { class: "starters" }, ...STARTERS.map((q) => h("button", { class: "starter", type: "button", onclick: () => send(q) }, q)))));
+      return;
+    }
+    for (const t of turns) thread.append(h("div", { class: "msg-user" }, t.question), botBubble(t));
+  }
+  async function send(text) {
+    const question = (text || "").trim();
+    if (question.length < 2 || turns.some((t) => t.pending)) return;
+    if (!settings.key) { openSettings("Add your API key to ask questions.", () => send(question)); return; }
+    const history = turns.filter((t) => !t.error && !t.pending).slice(-3).map((t) => ({ question: t.question, answer: t.answer }));
+    const turn = { question, pending: true }; turns.push(turn);
+    textarea.value = ""; grow(); paint(); sendBtn.disabled = true;
+    turn.el = thread.lastChild; turn.el.scrollIntoView({ behavior: "smooth", block: "end" });
+    try {
+      const data = await api(`/api/repos/${r.owner}/${r.name}/ask`, { method: "POST", body: { question, history }, withKey: true });
+      Object.assign(turn, { pending: false, answer: data.answer, sources: data.sources, cited: data.cited, model: data.model, latency_ms: data.latency_ms });
+    } catch (err) {
+      turns.pop();
+      if (["no_key", "bad_key", "bad_model"].includes(err.code)) { paint(); textarea.value = question; handleError(err, () => send(question)); sendBtn.disabled = false; return; }
+      Object.assign(turn, { pending: false, error: err.message }); turns.push(turn);
+    }
+    delete turn.el;
+    store.set(chatKey, turns.filter((t) => !t.pending).slice(-20));
+    paint(); sendBtn.disabled = false; textarea.focus();
+    thread.lastChild?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  paint(); setTimeout(() => textarea.focus(), 0);
+}
+
+/* ---------- find code ---------- */
+function tabSearch(content, r) {
+  const input = h("input", { type: "search", placeholder: "Function names, keywords, or a description", "aria-label": "Search the code" });
+  const results = h("div", { "aria-live": "polite" }, h("p", { style: "color:var(--muted)" }, "Search works without an API key: it matches both words and meaning."));
+  const run = async () => {
+    const query = input.value.trim(); if (!query) return;
+    results.replaceChildren(h("div", { class: "loading-center" }, "Searching…"));
+    try {
+      const { results: hits } = await api(`/api/repos/${r.owner}/${r.name}/search`, { method: "POST", body: { query } });
+      results.replaceChildren(...(hits.length ? hits.map((x) => h("article", { class: "hit" },
+        h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener" }, `${x.path}:${x.start_line}-${x.end_line}`), h("span", {}, x.name ? `${x.kind} ${x.name}` : x.language)),
+        h("pre", {}, x.text.split("\n").slice(0, 14).join("\n") + (x.text.split("\n").length > 14 ? "\n…" : "")))) : [h("p", {}, "No matches. Try other words.")]));
+    } catch (err) { results.replaceChildren(); handleError(err, run); }
+  };
+  content.append(h("form", { class: "searchbar", onsubmit: (e) => { e.preventDefault(); run(); } }, input, h("button", { class: "btn primary", type: "submit" }, "Search")), results);
+  setTimeout(() => input.focus(), 0);
+}
+
+/* ---------- review entry inside a repo ---------- */
+function tabReview(content, r) {
+  const input = h("input", { type: "text", placeholder: "Pull request number or link, e.g. 1234", "aria-label": "Pull request number or link" });
+  const go = () => {
+    const v = input.value.trim(); const num = v.match(/^#?(\d+)$/); const link = parseLink(v);
+    if (num) openReview(r.owner, r.name, num[1]);
+    else if (link && link.pull) openReview(link.owner, link.name, link.pull);
+    else toast("Enter a pull request number like 1234, or paste its link.");
+  };
+  content.append(h("h2", { style: "margin:4px 0 6px;font-size:1.35rem" }, "Review a pull request"),
+    h("p", { style: "color:var(--ink-2);margin:0 0 16px;max-width:620px" }, `Because ${r.full_name} is indexed, the review also reads related code from the rest of the project, which catches more real bugs.`),
+    h("form", { class: "pr-form", onsubmit: (e) => { e.preventDefault(); go(); } }, input, h("button", { class: "btn primary", type: "submit" }, "Review")),
+    h("p", { style: "margin-top:18px" }, h("a", { href: `https://github.com/${r.full_name}/pulls`, target: "_blank", rel: "noopener" }, "Browse open pull requests on GitHub")));
+  setTimeout(() => input.focus(), 0);
+}
+
+/* ================================================================ review */
+const SEVERITIES = ["critical", "major", "minor", "nit"];
+// Reviews spend the visitor's API quota, so they only start on the visitor's own click:
+// from the forms in this app, or the "Start review" button when a link was opened directly.
+let approvedReview = "";
+function openReview(owner, name, number) {
+  approvedReview = `${owner}/${name}#${number}`.toLowerCase();
+  location.hash = prHash(owner, name, number);
+}
+async function viewReview(view, owner, name, number) {
+  document.title = `Review #${number} · ${owner}/${name} · RepoScout`;
+  const url = `https://github.com/${owner}/${name}/pull/${number}`;
+  const head = h("div", { class: "review-head" },
+    h("div", { class: "crumbs" }, h("a", { href: repoHash(owner, name) }, `${owner}/${name}`), ` / pull request #${number}`),
+    h("h1", {}, `Reviewing pull request #${number}`));
+  const body = h("div", { "aria-live": "polite" });
+  view.replaceChildren(head, body);
+  if (!settings.key) {
+    body.append(h("div", { class: "card", style: "margin-top:22px;max-width:620px" }, h("h2", { style: "margin-top:0" }, "Add your API key to start"),
+      h("p", {}, `Reviews use your own free ${CONFIG.provider} key. It stays in your browser.`),
+      h("button", { class: "btn primary", onclick: () => openSettings("", () => route()) }, "Add API key")));
+    return;
+  }
+  const cacheKey = `rs.review.${owner}/${name}#${number}.${settings.model}`.toLowerCase();
+  const cached = store.get(cacheKey, true);
+  if (cached) return paintReview(head, body, cached, () => { store.del(cacheKey); openReview(owner, name, number); route(); });
+  const id = `${owner}/${name}#${number}`.toLowerCase();
+  if (approvedReview !== id) {
+    body.append(h("div", { class: "card", style: "margin-top:22px;max-width:620px" },
+      h("h2", { style: "margin-top:0" }, "Start the review?"),
+      h("p", {}, `RepoScout will read the changes in `, h("a", { href: url, target: "_blank", rel: "noopener" }, `${owner}/${name} #${number}`),
+        ` and review them with your ${CONFIG.provider} key (model ${settings.model || CONFIG.default_model}). This uses some of your free quota.`),
+      h("button", { class: "btn primary", type: "button", onclick: () => { approvedReview = id; route(); } }, "Start review")));
+    return;
+  }
+  approvedReview = "";
+  const started = Date.now();
+  const status = h("p", { style: "margin:0;color:var(--ink-2)" }, "Fetching the pull request…");
+  body.append(h("div", { class: "card progress-card", style: "margin-top:22px" }, h("h2", {}, "Reading the changes"), status, h("div", { class: "bar indeterminate", style: "margin-top:16px" }, h("span"))));
+  const timer = setInterval(() => { const s = Math.round((Date.now() - started) / 1000);
+    status.textContent = s < 4 ? "Fetching the pull request…" : `Reviewing each changed file with ${settings.model || "the AI model"}… ${s}s. Free keys can take a minute on bigger pull requests.`; }, 1000);
+  onLeave(() => clearInterval(timer));
+  try {
+    const data = await api("/api/review", { method: "POST", body: { url, min_severity: "nit" }, withKey: true });
+    clearInterval(timer);
+    store.set(cacheKey, data, true);
+    paintReview(head, body, data, () => { store.del(cacheKey); route(); });
+  } catch (err) {
+    clearInterval(timer);
+    body.replaceChildren(errorCard(err.message, () => { approvedReview = id; route(); }));
+    if (["no_key", "bad_key", "bad_model"].includes(err.code)) handleError(err, () => { approvedReview = id; route(); });
+  }
+}
+function paintReview(head, body, data, rerun) {
+  const pr = data.pull;
+  head.replaceChildren(
+    h("div", { class: "crumbs" }, h("a", { href: repoHash(...pr.repo.split("/")) }, pr.repo), ` / pull request #${pr.number}`),
+    h("h1", {}, pr.title || `Pull request #${pr.number}`),
+    h("div", { class: "review-meta" },
+      pr.author ? h("span", {}, `by ${pr.author}`) : null, pr.state ? h("span", {}, pr.state) : null,
+      h("span", {}, `${fmt(pr.changed_files)} files`), h("span", {}, h("span", { class: "plus" }, `+${fmt(pr.additions)}`), " ", h("span", { class: "minus" }, `−${fmt(pr.deletions)}`)),
+      h("a", { href: pr.url, target: "_blank", rel: "noopener" }, "Open on GitHub ", icon(ICONS.ext, 13))));
+  const counts = data.counts || {};
+  const total = SEVERITIES.reduce((a, s) => a + (counts[s] || 0), 0);
+  const active = new Set(SEVERITIES.filter((s) => s !== "nit" || total === (counts.nit || 0)));
+  const list = h("div");
+  const filters = h("div", { class: "filters", role: "group", "aria-label": "Filter by severity" });
+  const paintFilters = () => filters.replaceChildren(...SEVERITIES.filter((s) => counts[s]).map((s) =>
+    h("button", { class: `sev-btn sev-${s}`, type: "button", "aria-pressed": String(active.has(s)), onclick: () => { active.has(s) ? active.delete(s) : active.add(s); paintFilters(); paintList(); } }, `${counts[s]} ${s}`)));
+  const paintList = () => {
+    list.replaceChildren();
+    const shown = data.findings.filter((f) => active.has(f.severity));
+    const byFile = {};
+    for (const f of shown) (byFile[f.path] ||= []).push(f);
+    const files = data.files_reviewed.filter((p) => byFile[p] || data.file_summaries[p]);
+    for (const path of files) {
+      const group = h("section", { class: "file-group" }, h("h3", {}, path), data.file_summaries[path] ? h("p", { class: "summary" }, data.file_summaries[path]) : null);
+      for (const f of (byFile[path] || []).sort((a, b) => a.line - b.line)) group.append(h("article", { class: `finding ${f.severity}` },
+        h("div", { class: "top" }, h("span", { class: `badge ${f.severity}` }, f.severity), h("span", { class: "title" }, f.title),
+          h("a", { class: "where", href: f.url, target: "_blank", rel: "noopener" }, `line ${f.line}`)),
+        h("p", {}, f.message), f.suggestion ? h("pre", {}, f.suggestion) : null,
+        h("div", { class: "by" }, f.source === "llm" ? `AI review · ${f.category}` : `Fixed check (${f.source.replace("rule:", "")}) · ${f.category}`)));
+      list.append(group);
+    }
+    if (!shown.length && total) list.append(h("p", { style: "color:var(--muted)" }, "All findings are hidden by the filters above."));
+  };
+  const copyBtn = h("button", { class: "btn small", type: "button", onclick: () => navigator.clipboard?.writeText(data.markdown).then(() => toast("Review copied as Markdown. Paste it into a GitHub comment.")) }, "Copy as Markdown");
+  const rerunBtn = h("button", { class: "btn small", type: "button", onclick: rerun }, "Run again");
+  const verdict = total
+    ? h("div", { class: "verdict" }, h("span", { class: "big" }, `${total} thing${total === 1 ? "" : "s"} to look at`), filters, h("span", { class: "spacer" }), copyBtn, rerunBtn)
+    : h("div", { class: "verdict" }, h("span", { class: "big" }, "No problems found"), h("span", { style: "color:var(--muted)" }, `in ${fmt(data.files_reviewed.length)} reviewed file(s)`), h("span", { class: "spacer" }), copyBtn, rerunBtn);
+  const notes = [];
+  if (!data.used_repo_context) notes.push(h("div", { class: "banner" }, h("span", {}, "Tip: ", h("a", { href: repoHash(...pr.repo.split("/")) }, `index ${pr.repo}`), " first, and reviews will also read related code from the project.")));
+  const skipped = Object.entries(data.files_skipped || {});
+  if (skipped.length) notes.push(h("p", { style: "color:var(--muted);font-size:.88rem" }, `Skipped: ${skipped.map(([p, why]) => `${p} (${why})`).join(", ")}`));
+  if (data.stats && data.stats.llm_errors) notes.push(h("div", { class: "banner error" }, `The AI couldn't review ${data.stats.llm_errors} file(s), usually because of rate limits. Fixed checks still ran. Try "Run again" in a minute.`));
+  body.replaceChildren(verdict, ...notes, list);
+  paintFilters(); paintList();
+}
+
+/* ================================================================ start */
+api("/api/config").then((cfg) => {
+  CONFIG = cfg;
+  document.querySelectorAll("[data-provider]").forEach((el) => { el.textContent = cfg.provider; });
+  $("#keyLink").href = cfg.key_url;
+}).catch(() => {}).finally(() => { updateKeyPill(); });
+updateKeyPill();
+route();
+</script>
+</body>
+</html>

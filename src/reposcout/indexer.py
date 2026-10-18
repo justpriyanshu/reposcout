@@ -143,6 +143,7 @@ def _walk_files(root: Path) -> list[str]:
 
 def iter_repo_files(root: Path, max_bytes: int) -> Iterator[tuple[str, Path]]:
     """Yield (repo-relative posix path, absolute path) for every file worth indexing."""
+    root = root.resolve()
     rel_paths = _git_files(root)
     if rel_paths is None:
         rel_paths = _walk_files(root)
@@ -158,7 +159,11 @@ def iter_repo_files(root: Path, max_bytes: int) -> Iterator[tuple[str, Path]]:
             continue
         path = root / rel
         try:
-            if not path.is_file() or path.stat().st_size > max_bytes:
+            # Never follow symlinks: a repository could point one at /etc/passwd or a .env
+            # file outside the checkout, and indexed text is sent to the model.
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > max_bytes:
+                continue
+            if not path.resolve().is_relative_to(root):
                 continue
         except OSError:
             continue
@@ -186,8 +191,18 @@ class Indexer:
         self.chunk_max_lines = chunk_max_lines
 
     def index(
-        self, root: Path, rebuild: bool = False, progress: Callable[[str], None] | None = None
+        self,
+        root: Path,
+        rebuild: bool = False,
+        progress: Callable[[str], None] | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+        batch_chunks: int = 64,
     ) -> IndexStats:
+        """Bring the index in line with the files under ``root``.
+
+        ``on_progress(done, total)`` is called after each file. Chunks from several small
+        files are embedded together (up to ``batch_chunks`` per call), which is much faster
+        than one embedding request per file."""
         started = time.perf_counter()
         root = root.resolve()
         if rebuild:
@@ -199,36 +214,63 @@ class Indexer:
         if self.store.get_meta("chunker_version") != CHUNKER_VERSION:
             known = {path: "" for path in known}  # chunking changed: re-chunk every file
         seen: set[str] = set()
+        files = list(iter_repo_files(root, self.max_file_bytes))
+        pending: list[tuple[str, str, list]] = []  # (path, digest, chunks) waiting to be embedded
 
-        for rel, path in iter_repo_files(root, self.max_file_bytes):
+        def flush() -> None:
+            if not pending:
+                return
+            texts = [c.embedding_text() for _, _, chunks in pending for c in chunks]
+            try:
+                vectors = self.embedder.embed(texts)
+            except ProviderError:
+                raise  # provider is down: stop instead of failing every file
+            except Exception as exc:  # retry file by file so one bad file only skips itself
+                vectors = None
+                log.warning("batch embedding failed (%s); retrying file by file", exc)
+            offset = 0
+            for rel, digest, chunks in pending:
+                if vectors is not None:
+                    file_vectors = vectors[offset : offset + len(chunks)]
+                    offset += len(chunks)
+                else:
+                    try:
+                        file_vectors = self.embedder.embed([c.embedding_text() for c in chunks])
+                    except ProviderError:
+                        raise
+                    except Exception as exc:
+                        stats.errors.append(f"{rel}: {exc}")
+                        continue
+                self.store.replace_file(rel, digest, chunks, file_vectors)
+                stats.files_indexed += 1
+                stats.chunks_added += len(chunks)
+                if progress:
+                    progress(f"indexed {rel} ({len(chunks)} chunks)")
+            pending.clear()
+
+        for done, (rel, path) in enumerate(files, start=1):
             stats.files_seen += 1
             read = _read_text(path)
             if read is None:
                 stats.files_skipped += 1
-                continue
-            text, digest = read
-            seen.add(rel)
-            if known.get(rel) == digest:
-                stats.files_unchanged += 1
-                continue
-            chunks = chunk_file(rel, text, max_lines=self.chunk_max_lines)
-            if not chunks:
-                # Remember the hash anyway so empty files aren't re-read every run.
-                self.store.replace_file(rel, digest, [], [])
-                stats.files_skipped += 1
-                continue
-            try:
-                vectors = self.embedder.embed([c.embedding_text() for c in chunks])
-            except ProviderError:
-                raise  # provider is down: stop instead of failing every file
-            except Exception as exc:  # one bad file should not stop the whole run
-                stats.errors.append(f"{rel}: {exc}")
-                continue
-            self.store.replace_file(rel, digest, chunks, vectors)
-            stats.files_indexed += 1
-            stats.chunks_added += len(chunks)
-            if progress:
-                progress(f"indexed {rel} ({len(chunks)} chunks)")
+            else:
+                text, digest = read
+                seen.add(rel)
+                if known.get(rel) == digest:
+                    stats.files_unchanged += 1
+                else:
+                    chunks = chunk_file(rel, text, max_lines=self.chunk_max_lines)
+                    if not chunks:
+                        # Remember the hash anyway so empty files aren't re-read every run.
+                        self.store.replace_file(rel, digest, [], [])
+                        stats.files_skipped += 1
+                    else:
+                        pending.append((rel, digest, chunks))
+                        if sum(len(c) for _, _, c in pending) >= batch_chunks:
+                            flush()
+            if on_progress:
+                on_progress(done, len(files))
+        flush()
 
         for rel in set(known) - seen:
             self.store.remove_file(rel)
