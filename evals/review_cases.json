@@ -1,0 +1,155 @@
+{
+  "description": "Seeded-issue diffs for `reposcout eval review`. Lines in `expected` are new-file line numbers.",
+  "cases": [
+    {
+      "name": "sql_injection",
+      "description": "User input formatted into a SQL query",
+      "diff": "diff --git a/app/users.py b/app/users.py\n--- a/app/users.py\n+++ b/app/users.py\n@@ -10,3 +10,3 @@\n def find_user(conn, name):\n-    cur = conn.execute(\"SELECT * FROM users WHERE name = ?\", (name,))\n+    cur = conn.execute(f\"SELECT * FROM users WHERE name = '{name}'\")\n     return cur.fetchone()\n",
+      "expected": [
+        {
+          "path": "app/users.py",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "name": "hardcoded_api_key",
+      "description": "Secret committed in a settings module",
+      "diff": "diff --git a/app/settings.py b/app/settings.py\n--- a/app/settings.py\n+++ b/app/settings.py\n@@ -3,2 +3,3 @@\n DEBUG = False\n+PAYMENT_API_KEY = \"sk_live_51HxQ2b9f8a7c6d5e4f3\"\n TIMEOUT = 30\n",
+      "expected": [
+        {
+          "path": "app/settings.py",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "name": "shell_injection",
+      "description": "Filename passed through a shell",
+      "diff": "diff --git a/app/images.py b/app/images.py\n--- a/app/images.py\n+++ b/app/images.py\n@@ -20,2 +20,3 @@\n def make_thumbnail(filename):\n+    subprocess.run(f\"convert {filename} -resize 128x128 thumb.png\", shell=True)\n     return \"thumb.png\"\n",
+      "expected": [
+        {
+          "path": "app/images.py",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "name": "debugger_left_in",
+      "description": "breakpoint() left in request handler",
+      "diff": "diff --git a/app/views.py b/app/views.py\n--- a/app/views.py\n+++ b/app/views.py\n@@ -42,3 +42,4 @@\n def checkout(request):\n     cart = request.session[\"cart\"]\n+    breakpoint()\n     total = sum(item.price for item in cart)\n",
+      "expected": [
+        {
+          "path": "app/views.py",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "name": "bare_except_swallow",
+      "description": "Errors silently swallowed",
+      "diff": "diff --git a/app/sync.py b/app/sync.py\n--- a/app/sync.py\n+++ b/app/sync.py\n@@ -15,5 +15,5 @@\n def sync_orders(client):\n     try:\n         client.push_all()\n-    except ConnectionError:\n-        log.warning(\"sync failed, will retry\")\n+    except:\n+        pass\n",
+      "expected": [
+        {
+          "path": "app/sync.py",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "name": "mutable_default",
+      "description": "Shared list default argument",
+      "diff": "diff --git a/app/cart.py b/app/cart.py\n--- a/app/cart.py\n+++ b/app/cart.py\n@@ -5,0 +5,3 @@\n+def add_item(item, items=[]):\n+    items.append(item)\n+    return items\n",
+      "expected": [
+        {
+          "path": "app/cart.py",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "name": "unsafe_yaml",
+      "description": "yaml.load on uploaded config",
+      "diff": "diff --git a/app/config_loader.py b/app/config_loader.py\n--- a/app/config_loader.py\n+++ b/app/config_loader.py\n@@ -8,2 +8,2 @@\n def load_config(stream):\n-    return yaml.safe_load(stream)\n+    return yaml.load(stream)\n",
+      "expected": [
+        {
+          "path": "app/config_loader.py",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "name": "tls_disabled",
+      "description": "Certificate verification turned off",
+      "diff": "diff --git a/app/payments.py b/app/payments.py\n--- a/app/payments.py\n+++ b/app/payments.py\n@@ -30,3 +30,3 @@\n def charge(amount, token):\n-    resp = requests.post(API_URL, json={\"amount\": amount, \"token\": token}, timeout=10)\n+    resp = requests.post(API_URL, json={\"amount\": amount, \"token\": token}, verify=False)\n     resp.raise_for_status()\n",
+      "expected": [
+        {
+          "path": "app/payments.py",
+          "line": 31
+        }
+      ]
+    },
+    {
+      "name": "xss_innerhtml",
+      "description": "Unescaped user comment rendered as HTML",
+      "diff": "diff --git a/web/comments.js b/web/comments.js\n--- a/web/comments.js\n+++ b/web/comments.js\n@@ -12,3 +12,3 @@\n function renderComment(el, comment) {\n-  el.textContent = comment.body;\n+  el.innerHTML = comment.body;\n }\n",
+      "expected": [
+        {
+          "path": "web/comments.js",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "name": "off_by_one",
+      "description": "Loop runs one step past the end of the list (logic bug: LLM-only)",
+      "diff": "diff --git a/app/stats.py b/app/stats.py\n--- a/app/stats.py\n+++ b/app/stats.py\n@@ -3,5 +3,5 @@\n def total(values):\n     result = 0\n-    for v in values:\n-        result += v\n+    for i in range(len(values) + 1):\n+        result += values[i]\n     return result\n",
+      "expected": [
+        {
+          "path": "app/stats.py",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "name": "assignment_in_condition",
+      "description": "Assignment instead of comparison (logic bug: LLM-only)",
+      "diff": "diff --git a/web/auth.js b/web/auth.js\n--- a/web/auth.js\n+++ b/web/auth.js\n@@ -20,5 +20,5 @@\n function canDelete(user) {\n-  if (user.role === \"admin\") {\n+  if (user.role = \"admin\") {\n     return true;\n   }\n   return false;\n",
+      "expected": [
+        {
+          "path": "web/auth.js",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "name": "division_by_zero",
+      "description": "Average of a possibly empty list (logic bug: LLM-only)",
+      "diff": "diff --git a/app/report.py b/app/report.py\n--- a/app/report.py\n+++ b/app/report.py\n@@ -40,4 +40,2 @@\n def average_rating(reviews):\n-    if not reviews:\n-        return 0.0\n-    return sum(r.stars for r in reviews) / len(reviews)\n+    return sum(r.stars for r in reviews) / len(reviews)\n",
+      "expected": [
+        {
+          "path": "app/report.py",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "name": "clean_rename",
+      "description": "Harmless rename with no issues (measures false alarms)",
+      "diff": "diff --git a/app/utils.py b/app/utils.py\n--- a/app/utils.py\n+++ b/app/utils.py\n@@ -1,2 +1,3 @@\n-def fmt_price(cents):\n-    return f\"${cents / 100:.2f}\"\n+def format_price(cents: int) -> str:\n+    \"\"\"Format an amount in cents as dollars.\"\"\"\n+    return f\"${cents / 100:.2f}\"\n",
+      "expected": []
+    },
+    {
+      "name": "clean_test_fixture",
+      "description": "Fake password in a test file must not be flagged (measures false alarms)",
+      "diff": "diff --git a/tests/test_login.py b/tests/test_login.py\n--- a/tests/test_login.py\n+++ b/tests/test_login.py\n@@ -1,0 +1,4 @@\n+def test_login_rejects_wrong_password(client):\n+    password = \"not-the-real-password\"\n+    resp = client.post(\"/login\", json={\"user\": \"ana\", \"password\": password})\n+    assert resp.status_code == 401\n",
+      "expected": []
+    },
+    {
+      "name": "clean_feature",
+      "description": "Small correct feature (measures false alarms)",
+      "diff": "diff --git a/app/pagination.py b/app/pagination.py\n--- a/app/pagination.py\n+++ b/app/pagination.py\n@@ -1,0 +1,5 @@\n+def paginate(items, page, per_page=20):\n+    if page < 1 or per_page < 1:\n+        raise ValueError(\"page and per_page must be positive\")\n+    start = (page - 1) * per_page\n+    return items[start : start + per_page]\n",
+      "expected": []
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# Files RepoScout should not index (same syntax as .gitignore).
+# The eval datasets contain the test questions word for word, so indexing them would leak answers.
+evals/
