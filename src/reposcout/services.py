@@ -37,5 +37,10 @@ def build_services(
     embedder = make_embedder(settings)
     llm = make_llm(settings) if use_llm else None
     assistant = RepoAssistant(store, embedder, llm, settings.top_k, settings.max_context_chars)
-    reviewer = Reviewer(llm, assistant if use_context else None, min_severity=min_severity)
+    reviewer = Reviewer(
+        llm,
+        assistant if use_context else None,
+        min_severity=min_severity,
+        workers=max(1, settings.review_workers),
+    )
     return Services(settings, store, embedder, llm, assistant, reviewer)

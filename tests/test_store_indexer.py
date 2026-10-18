@@ -125,3 +125,15 @@ def test_ranking_weight():
     assert ranking_weight("README.md", "markdown", "how does login work") == DOC_WEIGHT
     assert ranking_weight("README.md", "markdown", "how do I install it") == 1.0
     assert ranking_weight("src/login.py", "python", "anything") == 1.0
+
+
+def test_secret_files_are_never_indexed(sample_repo, settings):
+    (sample_repo / ".env").write_text("REPOSCOUT_OPENAI_API_KEY='gsk_secret'\n")
+    (sample_repo / ".env.production").write_text("DB_PASSWORD=secret\n")
+    (sample_repo / ".env.example").write_text("REPOSCOUT_OPENAI_API_KEY=\n")
+    (sample_repo / "server.pem").write_text("-----BEGIN PRIVATE KEY-----\n")
+    store = IndexStore(settings.index_path)
+    Indexer(store, HashingEmbedder()).index(sample_repo)
+    paths = set(store.file_hashes())
+    assert ".env" not in paths and ".env.production" not in paths and "server.pem" not in paths
+    assert ".env.example" in paths  # the template has no secrets and documents the settings

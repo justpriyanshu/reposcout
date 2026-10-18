@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Protocol
@@ -42,9 +43,51 @@ class LLM(Protocol):
     ) -> str: ...
 
 
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+MAX_RETRY_WAIT = 60.0
+
+
+def _parse_wait(value: str | None) -> float | None:
+    """Seconds to wait from a header such as ``Retry-After: 2.5`` or Groq's
+    ``x-ratelimit-reset-tokens: 7.66s`` / ``1m2.5s`` / ``250ms``."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    total, found = 0.0, False
+    for number, unit in _DURATION_PART.findall(value):
+        found = True
+        total += float(number) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[unit]
+    return total if found else None
+
+
+def _retry_delay(resp: httpx.Response, fallback: float) -> float:
+    """How long to wait after a 429/5xx response.
+
+    ``Retry-After`` is the server's own answer, so it wins. Groq's ``x-ratelimit-reset-*``
+    headers say when each quota refills; only use a quota that is actually used up,
+    because the daily request quota can be hours away while tokens refill in seconds."""
+    retry_after = _parse_wait(resp.headers.get("retry-after"))
+    if retry_after is not None:
+        return min(retry_after + 0.5, MAX_RETRY_WAIT)
+    for kind in ("tokens", "requests"):
+        reset = _parse_wait(resp.headers.get(f"x-ratelimit-reset-{kind}"))
+        remaining = resp.headers.get(f"x-ratelimit-remaining-{kind}")
+        if reset is not None and (remaining is None or remaining.strip() in ("0", "0.0")):
+            return min(reset + 0.5, MAX_RETRY_WAIT)
+    return min(fallback, MAX_RETRY_WAIT)
+
+
 def _post_with_retries(
-    client: httpx.Client, url: str, payload: dict, headers: dict, provider: str, attempts: int = 3
+    client: httpx.Client, url: str, payload: dict, headers: dict, provider: str, attempts: int = 6
 ) -> httpx.Response:
+    """POST, retrying rate limits (429) and server errors (5xx).
+
+    Free API tiers limit tokens per minute, so a burst of review calls can be throttled
+    for tens of seconds; waiting for the reset time is better than failing the file."""
     delay = 1.5
     for attempt in range(1, attempts + 1):
         try:
@@ -52,18 +95,15 @@ def _post_with_retries(
         except httpx.TimeoutException as exc:
             if attempt == attempts:
                 raise ProviderError(f"{provider} timed out after {attempts} attempts") from exc
+            wait = min(delay, MAX_RETRY_WAIT)
         except httpx.HTTPError as exc:
             raise ProviderError(f"Could not reach {provider} at {url}: {exc}") from exc
         else:
             if resp.status_code not in RETRY_STATUSES or attempt == attempts:
                 return resp
-            retry_after = resp.headers.get("retry-after")
-            if retry_after and retry_after.isdigit():
-                delay = max(delay, float(retry_after))
-        log.warning(
-            "%s request failed (attempt %d/%d), retrying in %.1fs", provider, attempt, attempts, delay
-        )
-        time.sleep(delay)
+            wait = _retry_delay(resp, min(delay, MAX_RETRY_WAIT))
+        log.warning("%s request failed (attempt %d/%d), retrying in %.1fs", provider, attempt, attempts, wait)
+        time.sleep(wait)
         delay *= 2
     raise ProviderError(f"{provider} request failed")  # pragma: no cover
 
@@ -140,6 +180,16 @@ class OpenAICompatibleLLM:
             resp = _post_with_retries(self.client, url, payload, self.headers, "LLM API")
         if resp.status_code in (401, 403):
             raise ProviderError("The LLM API rejected the key. Check REPOSCOUT_OPENAI_API_KEY.")
+        if resp.status_code == 413:
+            raise ProviderError(
+                "The prompt is larger than this API allows per request or per minute. "
+                "Lower REPOSCOUT_MAX_CONTEXT_CHARS or REPOSCOUT_TOP_K, or use a model with higher limits."
+            )
+        if resp.status_code == 429:
+            raise ProviderError(
+                "The LLM API is still rate limiting after several retries. Wait a minute, "
+                "or set REPOSCOUT_REVIEW_WORKERS=1 so fewer requests run at once."
+            )
         if resp.status_code >= 400:
             raise ProviderError(f"LLM API error {resp.status_code}: {resp.text[:300]}")
         data = resp.json()

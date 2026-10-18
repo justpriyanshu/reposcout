@@ -123,3 +123,75 @@ def test_openai_embedder_orders_by_index():
     emb = OpenAICompatibleEmbedder("m", "https://x/v1", "k", client=mock_client(handler))
     vectors = emb.embed(["first", "second"])
     assert vectors[0][0] == 1.0 and vectors[1][1] == 1.0
+
+
+def test_parse_wait_understands_rate_limit_headers():
+    from reposcout.llm import _parse_wait
+
+    assert _parse_wait("2") == 2.0
+    assert _parse_wait("2.5") == 2.5
+    assert _parse_wait("7.66s") == pytest.approx(7.66)
+    assert _parse_wait("1m2.5s") == pytest.approx(62.5)
+    assert _parse_wait("250ms") == pytest.approx(0.25)
+    assert _parse_wait("soon") is None
+    assert _parse_wait(None) is None
+
+
+def test_rate_limit_waits_for_reset_header(monkeypatch):
+    waits = []
+    monkeypatch.setattr("reposcout.llm.time.sleep", waits.append)
+    responses = iter(
+        [
+            httpx.Response(429, headers={"x-ratelimit-reset-tokens": "7.5s"}, json={}),
+            httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]}),
+        ]
+    )
+    llm = OpenAICompatibleLLM("m", "https://x/v1", "k", client=mock_client(lambda r: next(responses)))
+    assert llm.complete("s", "u") == "ok"
+    assert waits == [8.0]  # the reset time plus a small margin
+
+
+def test_persistent_rate_limit_and_oversized_prompt_explain_the_fix(monkeypatch):
+    monkeypatch.setattr("reposcout.llm.time.sleep", lambda s: None)
+    always_429 = OpenAICompatibleLLM(
+        "m", "https://x/v1", "k", client=mock_client(lambda r: httpx.Response(429))
+    )
+    with pytest.raises(ProviderError, match="REPOSCOUT_REVIEW_WORKERS"):
+        always_429.complete("s", "u")
+    too_big = OpenAICompatibleLLM("m", "https://x/v1", "k", client=mock_client(lambda r: httpx.Response(413)))
+    with pytest.raises(ProviderError, match="MAX_CONTEXT_CHARS"):
+        too_big.complete("s", "u")
+
+
+def test_review_workers_setting_reaches_reviewer(settings):
+    from reposcout.services import build_services
+
+    services = build_services(settings.with_overrides(review_workers=1), use_llm=False)
+    assert services.reviewer.workers == 1
+
+
+def test_retry_after_wins_over_far_away_quota_resets():
+    from reposcout.llm import _retry_delay
+
+    groq_429 = httpx.Response(
+        429,
+        headers={
+            "retry-after": "3",
+            "x-ratelimit-reset-requests": "2m59.56s",  # daily request quota, not the problem
+            "x-ratelimit-remaining-requests": "14370",
+            "x-ratelimit-reset-tokens": "7.66s",
+        },
+    )
+    assert _retry_delay(groq_429, 1.5) == 3.5
+
+    tokens_used_up = httpx.Response(
+        429,
+        headers={
+            "x-ratelimit-reset-requests": "2m59.56s",
+            "x-ratelimit-remaining-requests": "14370",
+            "x-ratelimit-reset-tokens": "7.66s",
+            "x-ratelimit-remaining-tokens": "0",
+        },
+    )
+    assert _retry_delay(tokens_used_up, 1.5) == pytest.approx(8.16)
+    assert _retry_delay(httpx.Response(503), 1.5) == 1.5

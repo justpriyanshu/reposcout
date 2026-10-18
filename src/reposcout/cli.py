@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from . import __version__
-from .config import Settings
+from .config import Settings, load_env_file
 from .errors import RepoScoutError
 from .review import Severity
 from .services import Services, build_services
@@ -302,6 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_env_file(os.environ.get("REPOSCOUT_ENV_FILE", ".env"))
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s"

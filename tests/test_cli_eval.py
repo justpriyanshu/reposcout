@@ -69,3 +69,50 @@ def test_retrieval_eval_on_sample_repo(make_assistant):
     assert report["cases"] == 3
     assert report["recall@3"] == pytest.approx(2 / 3, abs=0.01)
     assert len(report["misses"]) == 1
+
+
+def test_env_file_is_loaded_without_overriding_the_shell(tmp_path, monkeypatch):
+    import os
+
+    from reposcout.config import Settings, load_env_file
+
+    monkeypatch.setattr(os, "environ", dict(os.environ))  # keep loaded values out of other tests
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# comment\n"
+        "\n"
+        "REPOSCOUT_LLM_MODEL='from-file'\n"
+        'export REPOSCOUT_TOP_K="5"\n'
+        "REPOSCOUT_EMBED_PROVIDER=hash  # inline comment\n"
+        "REPOSCOUT_OPENAI_API_KEY=\n"
+        "REPOSCOUT_LLM_PROVIDER=openai\n"
+    )
+    for name in (
+        "REPOSCOUT_LLM_MODEL",
+        "REPOSCOUT_TOP_K",
+        "REPOSCOUT_EMBED_PROVIDER",
+        "REPOSCOUT_OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("REPOSCOUT_LLM_PROVIDER", "ollama")  # already set in the shell
+
+    loaded = load_env_file(env_file)
+    settings = Settings()
+    assert settings.llm_model == "from-file"
+    assert settings.top_k == 5
+    assert settings.embed_provider == "hash"
+    assert settings.llm_provider == "ollama"  # the shell wins
+    assert "REPOSCOUT_OPENAI_API_KEY" not in loaded  # empty values are skipped
+    assert load_env_file(tmp_path / "missing.env") == []
+
+
+def test_cli_reads_env_file_from_current_folder(sample_repo, monkeypatch, capsys):
+    import os
+
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    monkeypatch.delenv("REPOSCOUT_EMBED_PROVIDER", raising=False)
+    monkeypatch.chdir(sample_repo)
+    (sample_repo / ".env").write_text("REPOSCOUT_EMBED_PROVIDER=hash\n")
+    assert main(["index"]) == 0
+    assert "hash-1024" in capsys.readouterr().err

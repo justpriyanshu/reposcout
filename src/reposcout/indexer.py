@@ -75,6 +75,13 @@ DEFAULT_IGNORES = [
     "*.db",
     "*.sqlite",
     "*.ipynb",
+    # Secrets must never be indexed: chunks are sent to the model as context.
+    ".env",
+    ".env.*",
+    "!.env.example",
+    "*.pem",
+    "*.key",
+    "id_rsa*",
 ]
 
 

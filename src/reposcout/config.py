@@ -7,6 +7,34 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 
+def load_env_file(path: str | Path = ".env") -> list[str]:
+    """Load ``KEY=value`` lines from a .env file into the environment.
+
+    Variables that are already set (for example in ~/.bashrc) are kept, so the shell
+    always wins. Blank lines, ``#`` comments, ``export`` prefixes and surrounding
+    quotes are handled. Returns the names that were loaded."""
+    path = Path(path)
+    if not path.is_file():
+        return []
+    loaded = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        if key and value and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
 def _env(name: str, default: str) -> str:
     return os.environ.get(f"REPOSCOUT_{name}", default)
 
@@ -50,6 +78,8 @@ class Settings:
     top_k: int = field(default_factory=lambda: _env_int("TOP_K", 8))
     max_context_chars: int = field(default_factory=lambda: _env_int("MAX_CONTEXT_CHARS", 24_000))
     request_timeout: int = field(default_factory=lambda: _env_int("REQUEST_TIMEOUT", 180))
+    # Files reviewed in parallel. Use 1 on rate-limited free API tiers.
+    review_workers: int = field(default_factory=lambda: _env_int("REVIEW_WORKERS", 4))
 
     @property
     def index_path(self) -> Path:
