@@ -181,6 +181,29 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_serve_public(args) -> int:
+    import uvicorn
+
+    from .embeddings import make_embedder
+    from .web.app import build_public_app
+    from .web.config import PublicSettings
+
+    public = PublicSettings()
+    app = build_public_app(public, make_embedder(_settings(args)))
+    print(
+        f"RepoScout public app on http://{args.host}:{args.port} (data in {public.data_dir})",
+        file=sys.stderr,
+    )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        log_level="info" if args.verbose else "warning",
+        proxy_headers=public.trust_proxy,
+    )
+    return 0
+
+
 def cmd_eval(args) -> int:
     from .evaluation import eval_retrieval, eval_review, load_cases
 
@@ -287,6 +310,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=cmd_serve)
+
+    p = sub.add_parser(
+        "serve-public",
+        parents=[common],
+        help="run the public multi-repo web app (visitors bring their own key)",
+    )
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=cmd_serve_public)
 
     p = sub.add_parser("eval", parents=[common], help="measure retrieval or review quality")
     p.add_argument("kind", choices=["retrieval", "review"])

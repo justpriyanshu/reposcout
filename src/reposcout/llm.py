@@ -64,7 +64,7 @@ def _parse_wait(value: str | None) -> float | None:
     return total if found else None
 
 
-def _retry_delay(resp: httpx.Response, fallback: float) -> float:
+def _retry_delay(resp: httpx.Response, fallback: float, max_wait: float = MAX_RETRY_WAIT) -> float:
     """How long to wait after a 429/5xx response.
 
     ``Retry-After`` is the server's own answer, so it wins. Groq's ``x-ratelimit-reset-*``
@@ -72,17 +72,23 @@ def _retry_delay(resp: httpx.Response, fallback: float) -> float:
     because the daily request quota can be hours away while tokens refill in seconds."""
     retry_after = _parse_wait(resp.headers.get("retry-after"))
     if retry_after is not None:
-        return min(retry_after + 0.5, MAX_RETRY_WAIT)
+        return min(retry_after + 0.5, max_wait)
     for kind in ("tokens", "requests"):
         reset = _parse_wait(resp.headers.get(f"x-ratelimit-reset-{kind}"))
         remaining = resp.headers.get(f"x-ratelimit-remaining-{kind}")
         if reset is not None and (remaining is None or remaining.strip() in ("0", "0.0")):
-            return min(reset + 0.5, MAX_RETRY_WAIT)
-    return min(fallback, MAX_RETRY_WAIT)
+            return min(reset + 0.5, max_wait)
+    return min(fallback, max_wait)
 
 
 def _post_with_retries(
-    client: httpx.Client, url: str, payload: dict, headers: dict, provider: str, attempts: int = 6
+    client: httpx.Client,
+    url: str,
+    payload: dict,
+    headers: dict,
+    provider: str,
+    attempts: int = 6,
+    max_wait: float = MAX_RETRY_WAIT,
 ) -> httpx.Response:
     """POST, retrying rate limits (429) and server errors (5xx).
 
@@ -95,13 +101,13 @@ def _post_with_retries(
         except httpx.TimeoutException as exc:
             if attempt == attempts:
                 raise ProviderError(f"{provider} timed out after {attempts} attempts") from exc
-            wait = min(delay, MAX_RETRY_WAIT)
+            wait = min(delay, max_wait)
         except httpx.HTTPError as exc:
             raise ProviderError(f"Could not reach {provider} at {url}: {exc}") from exc
         else:
             if resp.status_code not in RETRY_STATUSES or attempt == attempts:
                 return resp
-            wait = _retry_delay(resp, min(delay, MAX_RETRY_WAIT))
+            wait = _retry_delay(resp, min(delay, max_wait), max_wait)
         log.warning("%s request failed (attempt %d/%d), retrying in %.1fs", provider, attempt, attempts, wait)
         time.sleep(wait)
         delay *= 2
@@ -153,9 +159,13 @@ class OpenAICompatibleLLM:
         api_key: str,
         timeout: float = 180,
         client: httpx.Client | None = None,
+        retry_attempts: int = 6,
+        max_retry_wait: float = MAX_RETRY_WAIT,
     ):
         self.model = model
         self.name = f"openai:{model}"
+        self.retry_attempts = retry_attempts
+        self.max_retry_wait = max_retry_wait
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self.client = client or httpx.Client(timeout=timeout)
@@ -172,12 +182,16 @@ class OpenAICompatibleLLM:
             payload["response_format"] = {"type": "json_object"}
         url = f"{self.base_url}/chat/completions"
         started = time.perf_counter()
-        resp = _post_with_retries(self.client, url, payload, self.headers, "LLM API")
+        resp = _post_with_retries(
+            self.client, url, payload, self.headers, "LLM API", self.retry_attempts, self.max_retry_wait
+        )
         if resp.status_code == 400 and "response_format" in payload:
             # Some OpenAI-compatible servers don't support JSON mode; the prompt still asks for JSON.
             self._json_supported = False
             payload.pop("response_format")
-            resp = _post_with_retries(self.client, url, payload, self.headers, "LLM API")
+            resp = _post_with_retries(
+                self.client, url, payload, self.headers, "LLM API", self.retry_attempts, self.max_retry_wait
+            )
         if resp.status_code in (401, 403):
             raise ProviderError("The LLM API rejected the key. Check REPOSCOUT_OPENAI_API_KEY.")
         if resp.status_code == 413:
