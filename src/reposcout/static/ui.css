@@ -311,7 +311,8 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .a li + li { margin-top: 4px; }
 .a h3 { font-size: 1rem; font-weight: 750; }
 .a blockquote { padding-left: var(--s-3); border-left: 3px solid var(--line-strong); color: var(--text-2); }
-.src.uncited { opacity: .6; }
+.src.uncited { color: var(--text-3); border-style: dashed; }
+.src.uncited .n { background: var(--panel); color: var(--text-3); }
 .afoot .model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .afoot > :not(.model) { flex: none; }
 .afoot { display: flex; align-items: center; gap: var(--s-3); margin-top: 6px; padding: 0 4px; color: var(--text-3); font-size: var(--t-sm); }
