@@ -1,4 +1,5 @@
 // Shared DOM and network helpers: element builder, icons, storage, the API client, toasts and small blocks.
+import { shortPath } from "./paths.js";
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -167,6 +168,10 @@ export function toast(message, { action = null, kind = "info" } = {}) {
 }
 
 /* ================================================================ small blocks */
+/** "path:start-end" for one line: a long path is cut in the middle (and by CSS), the line range always shows. */
+export const fileLoc = (path, start, end, max = 48) =>
+  h("span", { class: "loc" }, h("span", { class: "p" }, shortPath(path, max)), h("span", { class: "l" }, end === undefined ? `:${start}` : `:${start}-${end}`));
+
 export const fmt = (n) => Number(n || 0).toLocaleString();
 
 /** A skeleton bar; `cls` adds size classes such as "w-60" or "block". */
@@ -186,7 +191,10 @@ export function codeBlock(text, firstLine, maxLines, highlight = []) {
   const code = h("code", {}, ...shown.map((line, i) =>
     h("span", { class: marked.has(firstLine + i) ? "ln hl" : "ln", "data-n": firstLine + i }, line || " ")));
   if (lines.length > maxLines) code.append(h("span", { class: "ln", "data-n": "" }, "…"));
-  return h("pre", { class: "code" }, code);
+  const pre = h("pre", { class: "code" }, code);
+  // The line-number gutter fits the longest number shown (six-digit lines in big files).
+  pre.style.setProperty("--ln-w", `${Math.max(4, String(firstLine + shown.length - 1).length)}ch`);
+  return pre;
 }
 
 /** A "Copy" button that copies getText() and shows "Copied" briefly. */

@@ -1,5 +1,5 @@
 // Find code view: search one indexed repository. Needs no API key.
-import { ApiError, api, codeBlock, friendlyError, h, icon, skel, stateBlock } from "./core.js";
+import { ApiError, api, codeBlock, fileLoc, friendlyError, h, icon, skel, stateBlock } from "./core.js";
 import { matchedLines } from "./matched.js";
 import { mountTool } from "./repo.js";
 
@@ -25,7 +25,8 @@ export async function render(main, route, onLeave) {
   function card(x, query) {
     const label = x.name ? `${x.kind} ${x.name}` : x.language;
     return h("article", { class: "hit" },
-      h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener" }, `${x.path}:${x.start_line}-${x.end_line}`), label ? h("span", { class: "pill" }, label) : null),
+      h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener", title: `${x.path}:${x.start_line}-${x.end_line}` }, fileLoc(x.path, x.start_line, x.end_line)),
+        label ? h("span", { class: "pill", title: label }, label) : null),
       codeBlock(x.text, x.start_line, 14, matchedLines(x.text, query, x.start_line)));
   }
 

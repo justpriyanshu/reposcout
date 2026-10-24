@@ -1,5 +1,5 @@
 // The local page served by `reposcout serve`: Ask, Review a diff and Find code over one local index.
-import { $, codeBlock, h, icon, skel, stateBlock, store } from "./core.js";
+import { $, codeBlock, fileLoc, h, icon, skel, stateBlock, store } from "./core.js";
 import { markdown } from "./markdown.js";
 
 const SEV_LABEL = { critical: "Critical", major: "Major", minor: "Minor", nit: "Nit" };
@@ -126,8 +126,8 @@ $("#ask-form").addEventListener("submit", (e) => {
     const card = h("div", { class: "a" }, renderAnswer(data.answer, data.sources));
     if ((data.sources || []).length) {
       card.append(h("div", { class: "srcs", "aria-label": "Sources" }, data.sources.map((s) =>
-        h("span", { class: cited.has(s.ref) ? "src" : "src uncited", title: `${s.name || s.path}${cited.has(s.ref) ? "" : " (not cited)"}` },
-          h("span", { class: "n" }, s.ref), h("span", {}, `${s.path}:${s.start_line}-${s.end_line}`)))));
+        h("span", { class: cited.has(s.ref) ? "src" : "src uncited", title: `${s.path}:${s.start_line}-${s.end_line}${s.name ? ` (${s.name})` : ""}${cited.has(s.ref) ? "" : ", not cited"}` },
+          h("span", { class: "n" }, s.ref), fileLoc(s.path, s.start_line, s.end_line, 40)))));
     }
     return [card, h("div", { class: "afoot" }, h("span", {}, seconds(data.latency_ms)))];
   });
@@ -138,7 +138,7 @@ function findingCard(f) {
   const rule = String(f.source || "").replace(/^rule:/, "");
   return h("article", { class: `finding s-${f.severity}` },
     h("div", { class: "fh" }, h("span", { class: "sv" }, SEV_LABEL[f.severity] || f.severity), h("span", { class: "t" }, f.title),
-      h("span", { class: "where" }, `${f.path}:${f.line}`)),
+      h("span", { class: "where", title: `${f.path}:${f.line}` }, fileLoc(f.path, f.line, undefined, 40))),
     h("p", {}, f.message),
     f.suggestion ? [h("p", { class: "fix" }, "Suggested change"), h("pre", {}, f.suggestion)] : null,
     h("div", { class: "by" }, f.source === "llm" ? [icon("bot", 14), `AI review · ${f.category}`] : [icon("shield", 14), `Fixed check (${rule}) · ${f.category}`]));
@@ -170,7 +170,8 @@ $("#find-form").addEventListener("submit", (e) => {
     const data = await post("/search", { query, k: 8 });
     if (!data.results.length) return stateBlock({ icon: "search", title: `No matches for “${query}”`, text: "Try other words, or describe what the code does." });
     return data.results.map((r) => h("article", { class: "hit" },
-      h("header", {}, h("span", { class: "mono" }, `${r.path}:${r.start_line}-${r.end_line}`), r.name ? h("span", { class: "pill" }, r.name) : null),
+      h("header", {}, h("span", { class: "path", title: `${r.path}:${r.start_line}-${r.end_line}` }, fileLoc(r.path, r.start_line, r.end_line)),
+        r.name ? h("span", { class: "pill", title: r.name }, r.name) : null),
       codeBlock(r.text, r.start_line, 14)));
   });
 });

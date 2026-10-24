@@ -1,5 +1,5 @@
 // Ask view: chat about one indexed repository. Answers are Markdown with [n] citations that link to GitHub.
-import { ApiError, api, copyButton, friendlyError, h, icon, skel, store } from "./core.js";
+import { ApiError, api, copyButton, fileLoc, friendlyError, h, icon, skel, store } from "./core.js";
 import { markdown } from "./markdown.js";
 import { handleError, requireKey } from "./settings.js";
 import { mountTool } from "./repo.js";
@@ -50,7 +50,7 @@ export async function render(main, route, onLeave) {
 
   const thread = h("div", { class: "thread" });
   const status = h("div", { class: "sr-only", role: "status" });
-  const textarea = h("textarea", { rows: "1", placeholder: `Ask about ${name}…`, "aria-label": "Your question", maxlength: "2000" });
+  const textarea = h("textarea", { rows: "1", placeholder: name.length > 28 ? "Ask about this repository…" : `Ask about ${name}…`, "aria-label": "Your question", maxlength: "2000" });
   const sendBtn = h("button", { class: "btn primary icon", type: "submit", "aria-label": "Send" }, icon("arrow", 18));
   const clearBtn = h("button", { class: "btn quiet", type: "button", onclick: clear }, "Clear chat");
   const form = h("form", { class: "input", onsubmit: (e) => { e.preventDefault(); send(textarea.value); } }, textarea, sendBtn);
@@ -86,12 +86,12 @@ export async function render(main, route, onLeave) {
       card.append(h("div", { class: "srcs", "aria-label": "Sources" }, ...turn.sources.map((s) => {
         const isCited = cited.has(s.ref);
         return h("a", { class: isCited ? "src" : "src uncited", href: s.url, target: "_blank", rel: "noopener",
-          title: `${s.name ? `${s.kind} ${s.name}` : s.path}${isCited ? "" : " (not cited)"}` },
-          h("span", { class: "n" }, s.ref), h("span", {}, `${s.path}:${s.start_line}-${s.end_line}`));
+          title: `${s.path}:${s.start_line}-${s.end_line}${s.name ? ` (${s.kind} ${s.name})` : ""}${isCited ? "" : ", not cited"}` },
+          h("span", { class: "n" }, s.ref), fileLoc(s.path, s.start_line, s.end_line, 40));
       })));
     }
     return h("div", {}, card, h("div", { class: "afoot" },
-      turn.model ? h("span", {}, turn.model) : null,
+      turn.model ? h("span", { class: "model", title: turn.model }, turn.model) : null,
       turn.latency_ms ? h("span", {}, `${(turn.latency_ms / 1000).toFixed(1)}s`) : null,
       copyButton(() => turn.answer)));
   }

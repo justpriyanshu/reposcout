@@ -116,7 +116,7 @@ export function repoBar(record, { indexed = true, tool: toolId } = {}) {
   wrap.append(h("div", { class: "repobar" }, h("span", { class: "av", "aria-hidden": "true" }, initials(full)),
     h("span", { class: "nm", title: full }, full), h("span", { class: "meta" }, metaOf(record, indexed)), acts));
 
-  if (indexed && record.status !== "failed") {
+  if (indexed && record.ready) {
     const refresh = h("button", { class: "btn icon", type: "button", "aria-label": "Refresh index", title: "Refresh index" }, icon("refresh", 16));
     refresh.addEventListener("click", async () => {
       refresh.disabled = true;
