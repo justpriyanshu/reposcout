@@ -109,14 +109,16 @@ export async function api(path, { method = "GET", body, key, withKey = false } =
   return data;
 }
 
+const QUOTA_CODES = new Set(["too_many_requests", "queue_full"]);
+
 /** The message to show for a failed request (spec §10). */
 export function friendlyError(err) {
   if (!err) return "Something went wrong.";
   if (err.status === 0 || err.code === "network") return "Can't reach the server. Check your connection and try again.";
-  // "one at a time" is about a request still running, not a quota: its own message says what to do.
-  if (err.status === 429 && err.code !== "one_at_a_time") {
-    const minutes = Math.max(1, Math.ceil((Number(err.retryAfter) || 0) / 60));
-    return `You've hit the limit. Try again in ${minutes} min.`;
+  // Only RepoScout's own quotas carry a known wait; other 429s (one at a time, the provider's or
+  // GitHub's limits) explain themselves better in the server's message.
+  if (err.status === 429 && QUOTA_CODES.has(err.code) && Number.isFinite(err.retryAfter) && err.retryAfter > 0) {
+    return `You've hit the limit. Try again in ${Math.max(1, Math.ceil(err.retryAfter / 60))} min.`;
   }
   if (err.status === 503) return "RepoScout is busy. Try again in a moment.";
   return err.message || "Something went wrong.";

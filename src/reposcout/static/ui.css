@@ -157,6 +157,7 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .menu h4 { margin: 0 0 6px; padding: 0 8px; color: var(--text-3); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .menu a { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r-md); color: var(--text); font-size: var(--t-sm); font-weight: 600; }
 
+.menu a[aria-current="page"] { background: var(--hover); }
 .menu a.soon { color: var(--text-3); pointer-events: none; }
 .menu a .pill { margin-left: auto; height: 20px; font-size: var(--t-xs); }
 .navpos { position: relative; }
@@ -383,7 +384,7 @@ dialog label.check { font-weight: 400; }
 .state.error > svg { color: var(--bad); }
 .state .actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 /* skip link: visible only when focused */
-.skip { position: absolute; top: var(--s-2); left: var(--s-2); z-index: 70; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--ink); color: var(--ink-fg); font-size: var(--t-sm); font-weight: 600; transform: translateY(-200%); }
+.skip { position: absolute; top: var(--s-2); left: var(--s-2); z-index: 70; padding: var(--s-2) var(--s-3); border: 0; cursor: pointer; border-radius: var(--r-md); background: var(--ink); color: var(--ink-fg); font-size: var(--t-sm); font-weight: 600; transform: translateY(-200%); }
 .skip:focus { transform: none; }
 main:focus { outline: none; }
 .state .btn { margin-top: var(--s-2); }

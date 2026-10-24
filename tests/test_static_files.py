@@ -114,3 +114,16 @@ def test_js_modules_attach_events_with_listeners():
         text = path.read_text()
         assert not re.search(r"""\son[a-z]+=["']""", text), path.name
         assert "<style" not in text and "<script" not in text, path.name
+
+
+def test_page_links_are_routes():
+    # In a hash router any other fragment link (e.g. a skip link to "#view") would navigate home.
+    html = page("app.html")
+    assert re.findall(r'href="#(?!/)[^"]*"', html) == []
+
+
+def test_theme_is_set_before_first_paint():
+    html = page("app.html")
+    head = html[: html.index("</head>")]
+    assert re.search(r'<script src="[^"]*/js/theme-init\.js"></script>', head)
+    assert head.index("theme-init.js") < head.index("ui.css")

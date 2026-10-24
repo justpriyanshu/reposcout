@@ -39,6 +39,7 @@ function paintKey() {
 
 /* ================================================================ All tools menu */
 let menu = null;
+let currentTool = null;
 let opener = null;
 
 function menuButtons() { return document.querySelectorAll("[data-menu-btn]"); }
@@ -49,7 +50,8 @@ function buildMenu() {
     ...CATEGORIES.map((cat) => h("div", {},
       h("h4", {}, cat),
       ...TOOLS.filter((t) => t.category === cat).map((t) => t.live
-        ? h("a", { href: `#/${t.id}` }, toolIcon(t, "sm"), t.name)
+        // aria-current here too: on phones the direct links that carry it are hidden.
+        ? h("a", { href: `#/${t.id}`, "data-nav": t.id, "aria-current": t.id === currentTool ? "page" : null }, toolIcon(t, "sm"), t.name)
         : h("a", { class: "soon", "aria-disabled": "true" }, toolIcon(t, "sm"), t.name, h("span", { class: "pill" }, "Soon"))))));
 }
 
@@ -106,8 +108,9 @@ export function mountNav() {
   paintKey();
 }
 
-/** Mark the current tool's direct link with aria-current (null on home). */
+/** Mark the current tool's direct link and menu item with aria-current (null on home). */
 export function setCurrentTool(id) {
+  currentTool = id;
   document.querySelectorAll("[data-nav]").forEach((a) => {
     if (a.dataset.nav === id) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
