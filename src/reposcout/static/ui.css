@@ -451,3 +451,26 @@ main:focus { outline: none; }
   @starting-style { .toast { transform: none; } }
   .toast, .toast.leaving { transform: none; }
 }
+
+/* local page (reposcout serve): tabs in the nav, one panel per tool */
+.tabs { display: flex; gap: 2px; min-width: 0; }
+.tabs .navlink[aria-selected="true"] { color: var(--text); background: var(--hover); }
+.local { padding-top: var(--s-6); padding-bottom: var(--s-16); }
+.local .repobar { margin-bottom: var(--s-5); }
+.local .repobar .meta { grid-column: 2 / -1; }
+.local [role="tabpanel"][hidden] { display: none; }
+.local .box { align-items: flex-start; padding-right: var(--s-3); }
+.local .box textarea { max-height: 320px; resize: vertical; }
+.local .actrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-top: var(--s-3); }
+.local .keys { color: var(--text-3); font-size: var(--t-sm); }
+.local .minsev { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--text-2); font-size: var(--t-sm); }
+.local .minsev .input { padding: 0 var(--s-2); }
+.local .out { margin-top: var(--s-5); }
+.local .out[aria-busy="true"] .a { display: grid; gap: 10px; }
+.local .out > * + * { margin-top: var(--s-3); }
+.local .out > .verdict { margin-top: 0; }
+.local .verdict.stack { display: grid; gap: 6px; }
+.local .verdict ul { display: grid; gap: 4px; color: var(--text-2); font-size: var(--t-sm); }
+.local .verdict li b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.local .afoot { margin-top: 6px; }
+@media (max-width: 560px) { .tabs .navlink { padding: 0 8px; } .logo { margin-right: 0; } .logo .t { display: none; } }

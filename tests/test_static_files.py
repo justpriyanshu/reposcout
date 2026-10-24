@@ -127,3 +127,16 @@ def test_theme_is_set_before_first_paint():
     head = html[: html.index("</head>")]
     assert re.search(r'<script src="[^"]*/js/theme-init\.js"></script>', head)
     assert head.index("theme-init.js") < head.index("ui.css")
+
+
+def test_local_page_has_no_inline_code():
+    html = page("index.html")
+    assert "<style" not in html
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>\s*\S", html)
+    assert not re.search(r" on[a-z]+=", html)
+    assert re.findall(r'href="#[^"]*"', html) == []
+    assert "{{" not in html
+    assert f"/static/{version()}/js/local.js" in html
+    head = html[: html.index("</head>")]
+    assert re.search(r'<script src="[^"]*/js/theme-init\.js"></script>', head)
+    assert head.index("theme-init.js") < head.index("ui.css")

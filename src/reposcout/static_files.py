@@ -40,8 +40,7 @@ def version() -> str:
 
 def page(name: str) -> str:
     """An HTML page with its asset links pinned to the current asset version."""
-    html = _read(name).replace("/ui.css?v={{asset_version}}", "{{static}}/ui.css")
-    return html.replace("{{static}}", f"/static/{version()}")
+    return _read(name).replace("{{static}}", f"/static/{version()}")
 
 
 def _asset(path: str, immutable: bool) -> Response:
