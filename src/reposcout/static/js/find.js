@@ -1,7 +1,7 @@
 // Find code view: search one indexed repository. Needs no API key.
 import { ApiError, api, codeBlock, fileLoc, friendlyError, h, icon, skel, stateBlock } from "./core.js";
 import { matchedLines } from "./matched.js";
-import { mountTool } from "./repo.js";
+import { mountTool, repoPath } from "./repo.js";
 
 export { matchedLines };
 
@@ -39,7 +39,7 @@ export async function render(main, route, onLeave) {
     hits.replaceChildren(...skeletons());
     let result = null, failure = null;
     try {
-      result = await api(`/api/repos/${owner}/${name}/search`, { method: "POST", body: { query } });
+      result = await api(`${repoPath(owner, name)}/search`, { method: "POST", body: { query } });
     } catch (err) {
       failure = err instanceof ApiError ? err : new ApiError(0, "network", friendlyError(err));
     }

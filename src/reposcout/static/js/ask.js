@@ -2,7 +2,7 @@
 import { ApiError, api, copyButton, fileLoc, friendlyError, h, icon, skel, store } from "./core.js";
 import { markdown } from "./markdown.js";
 import { handleError, requireKey } from "./settings.js";
-import { mountTool } from "./repo.js";
+import { mountTool, repoPath } from "./repo.js";
 
 const STARTERS = [
   "What does this project do, and how is it organised?",
@@ -120,7 +120,7 @@ export async function render(main, route, onLeave) {
   async function send(text) {
     const question = (text || "").trim();
     if (question.length < 2 || busy()) return;
-    if (!requireKey(() => send(question))) return; // the draft stays in the box
+    if (!requireKey(() => send(question), "Add your API key to ask questions.")) return; // the draft stays in the box
     const history = turns.filter((t) => !t.error && !t.pending).slice(-3).map((t) => ({ question: t.question, answer: t.answer }));
     const turn = { question, pending: true };
     turns.push(turn);
@@ -134,7 +134,7 @@ export async function render(main, route, onLeave) {
     timers.add(slow);
     let failure = null;
     try {
-      const data = await api(`/api/repos/${owner}/${name}/ask`, { method: "POST", body: { question, history }, withKey: true });
+      const data = await api(`${repoPath(owner, name)}/ask`, { method: "POST", body: { question, history }, withKey: true });
       Object.assign(turn, { pending: false, answer: data.answer, sources: data.sources, cited: data.cited, model: data.model, latency_ms: data.latency_ms });
     } catch (err) {
       failure = err instanceof ApiError ? err : new ApiError(0, "network", friendlyError(err));

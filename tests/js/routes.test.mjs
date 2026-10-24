@@ -27,8 +27,19 @@ test("invalid shapes degrade to the nearest valid route", () => {
 });
 
 test("parts are decoded, and bad encodings do not throw", () => {
-  assert.deepEqual(parseRoute("#/ask/o%20w/n"), { view: "tool", tool: "ask", owner: "o w", name: "n" });
+  assert.deepEqual(parseRoute("#/ask/o%2Dw/n"), { view: "tool", tool: "ask", owner: "o-w", name: "n" });
   assert.deepEqual(parseRoute("#/ask/%E0%A4%A/n"), { view: "tool", tool: "ask" });
+});
+
+test("owner and name must look like GitHub ones, else the picker is shown", () => {
+  const bare = { view: "tool", tool: "ask" };
+  assert.deepEqual(parseRoute("#/ask/o%2Fx/n"), bare);
+  assert.deepEqual(parseRoute("#/ask/o/n%3Fx%3D1"), bare);
+  assert.deepEqual(parseRoute("#/find/o/..%2F..%2Fx"), { view: "tool", tool: "find" });
+  assert.deepEqual(parseRoute("#/review/o_w/n/3"), { view: "tool", tool: "review" });
+  assert.deepEqual(parseRoute(`#/ask/${"a".repeat(40)}/n`), bare);
+  assert.deepEqual(parseRoute(`#/ask/o/${"n".repeat(101)}`), bare);
+  assert.deepEqual(parseRoute("#/ask/Foo-Bar/my.repo_x-1"), { view: "tool", tool: "ask", owner: "Foo-Bar", name: "my.repo_x-1" });
 });
 
 test("legacy links redirect to the new routes", () => {

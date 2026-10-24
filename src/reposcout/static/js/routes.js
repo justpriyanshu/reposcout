@@ -1,6 +1,8 @@
 // Hash routes (spec §6.1). Pure: no DOM, tested under Node.
 
 const TOOL_IDS = ["ask", "find", "review"];
+const OWNER_RE = /^[A-Za-z0-9-]{1,39}$/;
+const NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
 
 function parts(hash) {
   try {
@@ -20,7 +22,7 @@ export function parseRoute(hash) {
   const [tool, owner, name, num] = p;
   if (!TOOL_IDS.includes(tool)) return { view: "home" };
   const route = { view: "tool", tool };
-  if (!owner || !name) return route;
+  if (!OWNER_RE.test(owner || "") || !NAME_RE.test(name || "")) return route; // same shapes as parseLink: else the picker
   route.owner = owner;
   route.name = name;
   if (tool === "review" && /^\d+$/.test(num || "") && +num > 0) route.pull = +num;

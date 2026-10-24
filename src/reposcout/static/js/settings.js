@@ -118,9 +118,9 @@ export function openKeyDialog(message, then) {
 }
 
 /** True when a key is saved; otherwise opens the dialog (running `then` after a save) and returns false. */
-export function requireKey(then) {
+export function requireKey(then, message = "") {
   if (settings.key) return true;
-  openKeyDialog("", then);
+  openKeyDialog(message, then);
   return false;
 }
 
