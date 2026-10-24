@@ -219,10 +219,12 @@ src/reposcout/
   review/          diff parser, rules, LLM reviewer, finding schema
   github.py        PR diffs, review posting, webhook signature check
   server.py        FastAPI app: API, web UI, webhook
+  static_files.py  serves the web UI's static files
+  static/          web UI: app.html, index.html, ui.css, js/ modules
   evaluation.py    retrieval and review metrics
   cli.py           command-line interface
 evals/             labelled datasets
-tests/             95 tests, no network or model needed
+tests/             Python tests (no network or model needed); tests/js: Node tests for the web UI modules
 docs/DESIGN.md     design decisions and trade-offs
 ```
 
@@ -231,6 +233,7 @@ docs/DESIGN.md     design decisions and trade-offs
 ```bash
 pip install -e ".[dev]"
 pytest              # runs offline: models and GitHub are faked
+node --test "tests/js/*.test.mjs"   # web UI module tests (CI runs these too)
 ruff check src tests && ruff format --check src tests
 ```
 
