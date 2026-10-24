@@ -20,5 +20,9 @@ jobs:
       - run: ruff check src tests
       - run: ruff format --check src tests
       - run: pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node --test "tests/js/*.test.mjs"
       - name: Rules-only review eval (no model needed)
         run: reposcout eval review evals/review_cases.json --no-llm --embed-provider hash

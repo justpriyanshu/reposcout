@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -97,3 +98,19 @@ def test_caddy_csp_has_no_inline_scripts():
     line = next(ln for ln in caddy.read_text().splitlines() if "Content-Security-Policy" in ln)
     assert "script-src 'self';" in line
     assert "fonts.googleapis" not in line and "fonts.gstatic" not in line
+
+
+def test_public_page_has_no_inline_code():
+    html = page("app.html")
+    assert "<style" not in html
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>\s*\S", html)
+    assert not re.search(r" on[a-z]+=", html)
+    assert f"/static/{version()}/js/app.js" in html
+
+
+def test_js_modules_attach_events_with_listeners():
+    js_dir = Path(static_files.__file__).parent / "static" / "js"
+    for path in sorted(js_dir.glob("*.js")):
+        text = path.read_text()
+        assert not re.search(r"""\son[a-z]+=["']""", text), path.name
+        assert "<style" not in text and "<script" not in text, path.name

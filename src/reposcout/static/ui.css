@@ -78,6 +78,7 @@
 /* ================================================================ base */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; }
+[hidden] { display: none !important; }
 body { min-height: 100vh; background: var(--bg); color: var(--text); font: var(--t-base)/1.55 var(--font); -webkit-font-smoothing: antialiased; }
 h1, h2, h3, p, ul, pre { margin: 0; }
 ul { padding: 0; list-style: none; }
@@ -349,6 +350,21 @@ dialog h2 { font-size: var(--t-lg); font-weight: 750; }
 dialog p { color: var(--text-2); font-size: var(--t-sm); }
 dialog label { font-size: var(--t-sm); font-weight: 650; }
 dialog .act { display: flex; justify-content: flex-end; gap: var(--s-2); }
+dialog .act .start { margin-right: auto; }
+dialog .banner { margin-top: 0; }
+.field { display: grid; gap: 6px; }
+.field-row { display: flex; gap: var(--s-2); }
+.field-row .input { flex: 1; min-width: 0; }
+.field-row .btn { height: auto; }
+.banner > svg { flex: none; margin-top: 2px; }
+.input select { flex: 1; min-width: 0; height: var(--ctl); border: 0; outline: 0; background: none; color: inherit; font: inherit; font-size: var(--t-sm); }
+.help { color: var(--text-3); font-size: var(--t-sm); }
+.field-msg { min-height: 1.5em; color: var(--text-3); font-size: var(--t-sm); }
+.field-msg.ok { color: var(--ok); } .field-msg.err { color: var(--bad); }
+.check { display: flex; align-items: flex-start; gap: var(--s-2); color: var(--text-2); font-size: var(--t-sm); font-weight: 400; cursor: pointer; }
+dialog label.check { font-weight: 400; }
+.check input { flex: none; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--blue); }
+@media (max-width: 560px) { .field-row { flex-wrap: wrap; } .field-row .btn { flex: 1; } }
 
 
 /* hover, gated to devices that really hover */
@@ -363,6 +379,13 @@ dialog .act { display: flex; justify-content: flex-end; gap: var(--s-2); }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .hit header .btn { height: 32px; }
 .state.error h3 { color: var(--bad); }
+.state > svg { color: var(--text-3); }
+.state.error > svg { color: var(--bad); }
+.state .actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+/* skip link: visible only when focused */
+.skip { position: absolute; top: var(--s-2); left: var(--s-2); z-index: 70; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--ink); color: var(--ink-fg); font-size: var(--t-sm); font-weight: 600; transform: translateY(-200%); }
+.skip:focus { transform: none; }
+main:focus { outline: none; }
 .state .btn { margin-top: var(--s-2); }
 
 /* banner: inline notice under a bar or above a form */
