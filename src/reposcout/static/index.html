@@ -20,17 +20,12 @@
   nav button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
   section { display: none; }
   section.active { display: block; }
-  textarea { width: 100%; min-height: 90px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
-             background: var(--surface); color: var(--text); font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-             resize: vertical; }
+  textarea.input { min-height: 96px; }
   #diff { min-height: 240px; }
   .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-  .primary { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 8px;
-             padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; }
-  .primary:disabled { opacity: .6; cursor: wait; }
-  select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+  select.input { width: auto; height: 36px; }
   .hint { color: var(--text-3); font-size: 13px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .card { margin-top: 16px; }
   .answer { white-space: pre-wrap; }
   .sources { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; }
   .sources li { padding: 4px 0; border-top: 1px dashed var(--border); font-family: ui-monospace, Menlo, monospace; }
@@ -42,7 +37,7 @@
   .finding .title { font-weight: 600; margin: 2px 0; }
   pre { background: var(--surface-2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; margin: 8px 0 0; }
   .finding pre { background: var(--surface); }
-  .error { color: var(--critical); }
+  .banner { margin-top: 16px; }
   .result-hit { margin-top: 14px; }
   .result-hit .meta { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text-3); }
 </style>
@@ -61,25 +56,25 @@
   </nav>
 
   <section id="ask" class="active">
-    <textarea id="question" placeholder="Ask about the codebase, e.g. “How are webhook signatures verified?”"></textarea>
-    <div class="row"><button class="primary" id="ask-btn">Ask</button><span class="hint">Ctrl/⌘ + Enter</span></div>
+    <textarea class="input mono" id="question" placeholder="Ask about the codebase, e.g. “How are webhook signatures verified?”"></textarea>
+    <div class="row"><button class="btn primary" id="ask-btn">Ask</button><span class="hint"><kbd class="kbd">Ctrl/⌘</kbd> + <kbd class="kbd">Enter</kbd></span></div>
     <div id="ask-out"></div>
   </section>
 
   <section id="review">
-    <textarea id="diff" placeholder="Paste a unified diff (output of git diff)…"></textarea>
+    <textarea class="input mono" id="diff" placeholder="Paste a unified diff (output of git diff)…"></textarea>
     <div class="row">
-      <button class="primary" id="review-btn">Review</button>
+      <button class="btn primary" id="review-btn">Review</button>
       <label class="hint">Minimum severity
-        <select id="min-sev"><option>nit</option><option>minor</option><option>major</option><option>critical</option></select>
+        <select class="input" id="min-sev"><option>nit</option><option>minor</option><option>major</option><option>critical</option></select>
       </label>
     </div>
     <div id="review-out"></div>
   </section>
 
   <section id="search">
-    <textarea id="query" placeholder="Keywords or a description of the code you are looking for"></textarea>
-    <div class="row"><button class="primary" id="search-btn">Search</button></div>
+    <textarea class="input mono" id="query" placeholder="Keywords or a description of the code you are looking for"></textarea>
+    <div class="row"><button class="btn primary" id="search-btn">Search</button></div>
     <div id="search-out"></div>
   </section>
 </main>
@@ -98,10 +93,11 @@ async function post(url, body) {
   if (!resp.ok) throw new Error(data.error || (data.detail && JSON.stringify(data.detail)) || resp.statusText);
   return data;
 }
-function showError(target, err) { target.replaceChildren(el("div", "card error", err.message)); }
+function showError(target, err) { target.replaceChildren(el("div", "banner error", err.message)); }
 async function withButton(btn, fn) {
-  btn.disabled = true; const label = btn.textContent; btn.textContent = "Working…";
-  try { await fn(); } finally { btn.disabled = false; btn.textContent = label; }
+  if (btn.getAttribute("aria-busy") === "true") return;
+  btn.setAttribute("aria-busy", "true");
+  try { await fn(); } finally { btn.removeAttribute("aria-busy"); }
 }
 
 document.querySelectorAll("nav button").forEach((btn) => btn.addEventListener("click", () => {
