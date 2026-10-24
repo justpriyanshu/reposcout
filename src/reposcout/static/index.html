@@ -35,6 +35,9 @@
   .summaries b { font: 600 var(--text-xs) var(--mono); color: var(--text); }
   .findings { display: grid; gap: var(--s-3); }
   .stats-skeleton { width: 220px; height: 22px; border-radius: var(--r-full); }
+  .sk-card { display: grid; gap: var(--s-3); }
+  .sk-line { height: 12px; }
+  .sk-line.short { width: 55%; }
   .empty { padding: var(--s-6); text-align: center; color: var(--text-3); }
 </style>
 </head>
@@ -92,11 +95,20 @@ async function post(url, body) {
   if (!resp.ok) throw new Error(data.error || (data.detail && JSON.stringify(data.detail)) || resp.statusText);
   return data;
 }
-function showError(target, err) { target.replaceChildren(el("div", "banner error", err.message)); }
+function showError(target, err) { const box = el("div", "banner error", err.message); box.setAttribute("role", "alert"); target.replaceChildren(box); }
+function placeholder() {
+  const card = el("div", "card sk-card");
+  card.setAttribute("aria-hidden", "true");
+  ["", "", "short"].forEach((w) => card.append(el("span", `skeleton sk-line ${w}`)));
+  return card;
+}
 async function withButton(btn, fn) {
   if (btn.getAttribute("aria-busy") === "true") return;
+  const out = btn.closest("section").querySelector(".out");
   btn.setAttribute("aria-busy", "true");
-  try { await fn(); } finally { btn.removeAttribute("aria-busy"); }
+  out.setAttribute("aria-busy", "true");
+  out.replaceChildren(placeholder());
+  try { await fn(); } finally { btn.removeAttribute("aria-busy"); out.removeAttribute("aria-busy"); }
 }
 function codeBlock(text, firstLine, maxLines) {
   const lines = text.split("\n");

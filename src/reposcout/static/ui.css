@@ -292,6 +292,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .skeleton { display: block; background: var(--surface-3); border-radius: var(--r-sm); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .5; } }
 
+/* Empty, error and "nothing here yet" blocks. */
+.state { display: grid; justify-items: center; gap: var(--s-2); padding: var(--s-10) var(--s-6); text-align: center; }
+.state-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: var(--s-1); border-radius: 50%; background: var(--surface-2); color: var(--text-3); }
+.state.error .state-icon { background: var(--danger-soft); color: var(--danger); }
+.state-title { font-size: var(--text-base); font-weight: 600; letter-spacing: 0; }
+.state-text { max-width: 46ch; font-size: var(--text-md); color: var(--text-2); }
+.state .actions { justify-content: center; margin-top: var(--s-3); }
+.state.compact { padding: var(--s-6) var(--s-4); }
+
 /* ================================================================ dialog */
 dialog {
   width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0;
