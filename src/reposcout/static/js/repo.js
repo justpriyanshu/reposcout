@@ -87,7 +87,7 @@ export function renderPicker(body, toolId) {
       return h("a", { class: "chip", href: toolHash(toolId, o, n) }, full);
     }));
   };
-  body.replaceChildren(h("section", { class: "pick enter" }, h("h2", {}, copy.title), h("p", {}, copy.help), form, msg,
+  body.replaceChildren(h("section", { class: "pick" }, h("h2", {}, copy.title), h("p", {}, copy.help), form, msg,
     h("p", { class: "try" }, "Try"), chips));
   api("/api/repos").then(
     (data) => { if (chips.isConnected) show(pickerRepos(data.repos)); },
@@ -181,7 +181,7 @@ function indexingCard(full) {
   const bar = h("div", { class: "bar wait", role: "progressbar", "aria-label": "Indexing progress", "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
   const steps = h("ul", { class: "steps" });
   const status = h("p", { class: "sr-only", role: "status" }); // announced only when the step changes
-  const card = h("section", { class: "progress enter" }, h("h2", {}, `Getting ${full} ready`),
+  const card = h("section", { class: "progress" }, h("h2", {}, `Getting ${full} ready`),
     h("p", {}, "This happens once per repository. You can leave this page open, or come back later."), bar, steps, status);
   let shownStep = -1, shownText = "";
   return {
@@ -287,7 +287,13 @@ export async function mountTool(main, route, onLeave, { index = true } = {}) {
 
   if (index) {
     const record = await ensureIndexed(content, owner, name, onLeave, { tool: route.tool, onRecord: (r) => swap(repoBar(r, { indexed: true, tool: route.tool })) });
-    return !record || route.signal?.aborted ? null : { content, record };
+    if (!record || route.signal?.aborted) return null;
+    // The tool replaces the indexing card the visitor was watching: let it arrive rather than jump in.
+    if (content.querySelector(".progress")) {
+      content.classList.add("enter");
+      content.addEventListener("animationend", function done(e) { if (e.target === content) { content.classList.remove("enter"); content.removeEventListener("animationend", done); } });
+    }
+    return { content, record };
   }
   let record = null, missing = false;
   try { record = (await api(repoPath(owner, name))).repo; }

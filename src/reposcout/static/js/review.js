@@ -54,7 +54,7 @@ function prForm(content, { owner, name, signal }) {
 
 /* ================================================================ #/review/o/n/num */
 /** A plain card for the steps before the result: no key, "Start the review?", the progress. */
-const stepCard = (title, ...rest) => h("section", { class: "progress enter" }, h("h2", {}, title), ...rest);
+const stepCard = (title, ...rest) => h("section", { class: "progress" }, h("h2", {}, title), ...rest);
 
 function reviewPage(content, route, onLeave) {
   const { owner, name, pull } = route;

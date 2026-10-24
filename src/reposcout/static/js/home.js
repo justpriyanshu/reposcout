@@ -60,7 +60,7 @@ export function render(main, route) {
   const list = h("div", { "aria-live": "polite" }, categories(""));
   const input = h("input", { type: "search", placeholder: `Search ${TOOLS.length} tools`, "aria-label": "Search tools", autocomplete: "off",
     oninput: () => list.replaceChildren(...categories(input.value)) });
-  const recent = h("div", { class: "rows", style: "margin-top:var(--s-4)" });
+  const recent = h("div", { class: "rows recent" });
 
   main.append(h("div", { class: "wrap" },
     h("section", { class: "hero" },

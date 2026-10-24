@@ -1,5 +1,5 @@
 // Ask view: chat about one indexed repository. Answers are Markdown with [n] citations that link to GitHub.
-import { ApiError, api, copyButton, friendlyError, h, icon, store } from "./core.js";
+import { ApiError, api, copyButton, friendlyError, h, icon, skel, store } from "./core.js";
 import { markdown } from "./markdown.js";
 import { handleError, requireKey } from "./settings.js";
 import { mountTool } from "./repo.js";
@@ -73,7 +73,7 @@ export async function render(main, route, onLeave) {
     if (turn.pending) {
       return h("div", { class: "a" }, h("div", { class: "pending", role: "status" },
         h("span", { class: "lbl" }, "Reading the code…"),
-        h("span", { class: "skel", style: "width:90%" }), h("span", { class: "skel", style: "width:74%" }), h("span", { class: "skel", style: "width:58%" }),
+        skel("w-90"), skel("w-75"), skel("w-60"),
         turn.slow ? h("span", { class: "lbl" }, SLOW_NOTE) : null));
     }
     if (turn.error) {
@@ -100,11 +100,16 @@ export async function render(main, route, onLeave) {
     thread.replaceChildren();
     if (!turns.length) {
       thread.append(h("div", {},
-        h("div", { class: "state", style: "padding-bottom:0" }, h("h3", {}, `Ask anything about ${name}`),
+        h("div", { class: "state intro" }, h("h3", {}, `Ask anything about ${name}`),
           h("p", {}, "Answers come from the indexed code and link to the exact lines on GitHub.")),
         h("div", { class: "starters" }, ...STARTERS.map((q) => h("button", { class: "starter", type: "button", onclick: () => send(q) }, q)))));
     }
-    for (const t of turns) thread.append(h("div", { class: t === fresh ? "ex enter" : "ex" }, h("div", { class: "q" }, t.question), answerCard(t)));
+    for (const t of turns) {
+      // Only the arriving answer animates; the question above it is already on screen.
+      const answer = answerCard(t);
+      if (t === fresh) answer.classList.add("enter");
+      thread.append(h("div", { class: "ex" }, h("div", { class: "q" }, t.question), answer));
+    }
     sync();
   }
 
