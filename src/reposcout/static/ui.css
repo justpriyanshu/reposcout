@@ -483,7 +483,8 @@ main:focus { outline: none; }
 .local .out[aria-busy="true"] .a { display: grid; gap: 10px; }
 .local .out > * + * { margin-top: var(--s-3); }
 .local .out > .verdict { margin-top: 0; }
-.local .verdict.stack { display: grid; gap: 6px; }
+.local .verdict.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .local .minsev select { height: var(--ctl-touch); } }
 .local .verdict ul { display: grid; gap: 4px; color: var(--text-2); font-size: var(--t-sm); }
 .local .verdict li b { color: var(--text); font-family: var(--mono); font-weight: 600; }
 .local .afoot { margin-top: 6px; }
