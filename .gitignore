@@ -19,3 +19,4 @@ eval-runs/
 .claude/skills/
 .claude/settings.local.json
 skills-lock.json
+.claude/worktrees/
