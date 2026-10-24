@@ -294,6 +294,15 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .src .n { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-size: var(--t-cite); font-weight: 700; }
 .src span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.a .md > * + * { margin-top: 12px; }
+.a ul, .a ol { padding-left: 1.4em; }
+.a ul { list-style: disc; } .a ol { list-style: decimal; }
+.src span:last-child { line-height: 1.5; }
+.a li + li { margin-top: 4px; }
+.a h3 { font-size: 1rem; font-weight: 750; }
+.a blockquote { padding-left: var(--s-3); border-left: 3px solid var(--line-strong); color: var(--text-2); }
+.src.uncited { opacity: .6; }
+.ex { scroll-margin-top: 84px; }
 .afoot { display: flex; align-items: center; gap: var(--s-3); margin-top: 6px; padding: 0 4px; color: var(--text-3); font-size: var(--t-sm); }
 .starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); margin-top: var(--s-4); }
 .starter { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card); color: var(--text-2); font-size: var(--t-sm); text-align: left; cursor: pointer; transition: transform var(--d-fast) var(--ease-out); }
