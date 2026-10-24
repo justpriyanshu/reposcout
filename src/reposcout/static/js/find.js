@@ -1,6 +1,9 @@
-// Placeholder Find code view; replaced by the real tool page in a later task.
-import { h, stateBlock } from "./core.js";
+// Find code view: the tool page frame for now; search arrives in a later task.
+import { stateBlock } from "./core.js";
+import { mountTool } from "./repo.js";
 
-export function render(main) {
-  main.append(h("div", { class: "wrap" }, stateBlock({ icon: "search", title: "Find code" })));
+export async function render(main, route, onLeave) {
+  const page = await mountTool(main, route, onLeave, { index: true });
+  if (!page || route.signal.aborted) return;
+  page.content.replaceChildren(stateBlock({ icon: "search", title: "Find code is coming in the next step" }));
 }

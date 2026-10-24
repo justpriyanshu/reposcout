@@ -242,7 +242,13 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .repobar .av { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); font: 700 var(--t-sm)/1 var(--mono); color: var(--text-2); }
 .repobar .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 650 var(--t-base) var(--mono); }
 .repobar .meta { grid-column: 2; color: var(--text-3); font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.repobar .btn { grid-row: 1 / span 2; grid-column: 3; }
+.repobar .av { grid-row: 1 / span 2; }
+.repobar .acts { display: flex; gap: var(--s-2); grid-row: 1 / span 2; grid-column: 3; }
+.toolbody { margin-top: var(--s-5); }
+.pick .try { margin-top: var(--s-4); color: var(--text-3); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pick .try + .recent { margin-top: var(--s-2); }
+.pick .invalid { margin-top: var(--s-2); color: var(--bad); font-size: var(--t-sm); }
+.pick .chip .skel { width: 110px; }
 .pick { padding: var(--s-6); border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--card); box-shadow: var(--shadow); }
 .pick h2 { font-size: var(--t-lg); font-weight: 750; }
 .pick p { margin-top: 4px; color: var(--text-2); }
@@ -257,7 +263,8 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .progress h2 { font-size: var(--t-lg); font-weight: 750; }
 .progress p { margin-top: 4px; color: var(--text-2); }
 .bar { height: 6px; margin-top: var(--s-5); border-radius: 99px; background: var(--panel); overflow: hidden; }
-.bar span { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--blue); transform-origin: left; transform: scaleX(.32); }
+.bar span { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--blue); transform-origin: left; transform: scaleX(.32); transition: transform 1500ms linear; }
+.bar.wait span { animation: pulse 1.4s ease-in-out infinite; }
 .steps { display: grid; gap: 10px; margin-top: var(--s-5); font-size: var(--t-sm); }
 .steps li { display: flex; align-items: center; gap: 10px; color: var(--text-3); }
 .steps .mk { display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--line-strong); border-radius: 50%; }
@@ -416,6 +423,8 @@ main:focus { outline: none; }
   .btn:active, .chip:active, .sev:active, .starter:active, .tile:active { transform: none; }
   .tile:hover .go svg { transform: none; }
   .steps .now .mk { animation-duration: 2s; }
+  .bar span { transition: none; }
+  .bar.wait span { animation: none; }
   @starting-style { .toast { transform: none; } }
   .toast, .toast.leaving { transform: none; }
 }

@@ -1,6 +1,9 @@
-// Placeholder Review a PR view; replaced by the real tool page in a later task.
-import { h, stateBlock } from "./core.js";
+// Review a PR view: the tool page frame for now (no index needed); the review arrives in a later task.
+import { stateBlock } from "./core.js";
+import { mountTool } from "./repo.js";
 
-export function render(main) {
-  main.append(h("div", { class: "wrap" }, stateBlock({ icon: "review", title: "Review a PR" })));
+export async function render(main, route, onLeave) {
+  const page = await mountTool(main, route, onLeave, { index: false });
+  if (!page || route.signal.aborted) return;
+  page.content.replaceChildren(stateBlock({ icon: "review", title: "Review a PR is coming in the next step" }));
 }
