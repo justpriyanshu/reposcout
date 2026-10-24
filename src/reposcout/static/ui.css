@@ -357,7 +357,19 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .finding .where { margin-left: auto; font: var(--t-sm) var(--mono); }
 .finding > p { margin-top: 8px; color: var(--text-2); }
 .finding pre { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-md); background: var(--code); border: 1px solid var(--line); font: var(--t-sm)/1.6 var(--mono); overflow-x: auto; }
-.finding .by { margin-top: 10px; color: var(--text-3); font-size: var(--t-sm); }
+.finding .by { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-3); font-size: var(--t-sm); }
+.finding .by svg { flex: none; }
+.finding .fix { margin-top: 10px; color: var(--text-3); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.finding .fix + pre { margin-top: 6px; }
+.result > .prhead { margin-top: 0; }
+.prmeta a { display: inline-flex; align-items: center; gap: 4px; }
+.verdict .note { margin: 0; }
+.verdict .okmark { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); }
+.notes > .note { margin-top: var(--s-3); overflow-wrap: anywhere; }
+.input.prform { max-width: 440px; }
+.toolbody > .invalid { margin-top: var(--s-2); color: var(--bad); font-size: var(--t-sm); }
+.progress .actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-5); }
+.progress a { overflow-wrap: anywhere; }
 
 /* dialog */
 dialog { width: min(460px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--card); color: var(--text); box-shadow: var(--shadow-pop); }

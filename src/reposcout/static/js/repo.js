@@ -2,6 +2,7 @@
 import { h, icon, toolIcon, api, ApiError, toast, skel, stateBlock, fmt, friendlyError } from "./core.js";
 import { TOOLS, tool, pickerRepos, EXAMPLES } from "./tools.js";
 import { parseLink, toolHash } from "./links.js";
+import { approveReview } from "./reviewdata.js";
 
 const POLL_MS = 1500;
 const MAX_MISSES = 8; // consecutive failed polls before giving up
@@ -71,7 +72,8 @@ export function renderPicker(body, toolId) {
     const link = parseLink(input.value);
     if (!link) { setInvalid("Paste a link like github.com/owner/repo"); input.focus(); return; }
     setInvalid("");
-    // A PR link goes to Review from any tool.
+    // A PR link goes to Review from any tool, and starts at once: the visitor just asked for it.
+    if (link.pull) approveReview(link.owner, link.name, link.pull);
     location.hash = link.pull ? toolHash("review", link.owner, link.name, link.pull) : toolHash(toolId, link.owner, link.name);
   });
   input.addEventListener("input", () => { if (!msg.hidden) setInvalid(""); });
