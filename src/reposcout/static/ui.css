@@ -331,8 +331,10 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .hits { display: grid; gap: var(--s-3); margin-top: var(--s-5); }
 .hit { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
 .hit header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.hit header a, .hit header .path { display: flex; flex: 0 1 auto; min-width: 0; font: 600 var(--t-sm) var(--mono); color: var(--text); }
-.hit header .pill { display: block; flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; line-height: 24px; }
+.hit header a, .hit header .path { display: flex; flex: none; min-width: 0; max-width: calc(100% - 84px); font: 600 var(--t-sm) var(--mono); color: var(--text); }
+/* the file location never shrinks below its text unless it must; the label takes what is left */
+.hit header :only-child { max-width: 100%; }
+.hit header .pill { display: block; flex: 0 1 auto; min-width: 72px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; line-height: 24px; }
 .input.find { margin-top: var(--s-5); }
 .hit-skel { display: grid; gap: 8px; padding: 14px; }
 .hit pre { padding: 10px 0; background: var(--code); font: var(--t-sm)/1.65 var(--mono); overflow-x: auto; }
@@ -373,6 +375,8 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .finding .by svg { flex: none; }
 .finding .fix { margin-top: 10px; color: var(--text-3); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .finding .fix + pre { margin-top: 6px; }
+/* narrow screens: the line link sits beside the severity, the title gets its own line */
+@media (max-width: 560px) { .finding .t { order: 1; flex-basis: 100%; } .verdict .act { margin-left: 0; } }
 .result > .prhead { margin-top: 0; }
 .prmeta a { display: inline-flex; align-items: center; gap: 4px; }
 .verdict .note { margin: 0; }
