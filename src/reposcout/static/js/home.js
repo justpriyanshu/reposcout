@@ -26,12 +26,13 @@ function categories(query) {
 function recentRow(r) {
   const failed = r.status === "failed";
   const desc = r.description
-    || (r.ready ? `${fmt(r.files_total)} files indexed`
+    || (r.ready ? `${fmt(r.files_total)} ${r.files_total === 1 ? "file" : "files"} indexed`
       : failed ? "Indexing failed"
-      : r.files_total ? `${r.stage || "Indexing"} (${fmt(r.files_done)} of ${fmt(r.files_total)})` : (r.stage || "Waiting to start"));
+      : r.files_total ? `${r.stage || "Indexing"} (${fmt(r.files_done)} of ${fmt(r.files_total)})`
+      : r.status === "queued" && r.queue_position > 1 ? `Waiting to start (number ${r.queue_position} in line)` : (r.stage || "Waiting to start"));
   const cls = r.ready ? "ok" : failed ? "bad" : "busy";
   return h("a", { class: "row", href: toolHash("ask", r.owner, r.name) },
-    h("span", { class: "nm" }, r.full_name), h("span", { class: "ds" }, desc),
+    h("span", { class: "nm", title: r.full_name }, r.full_name), h("span", { class: "ds", title: desc }, desc),
     h("span", { class: `pill ${cls}` }, h("span", { class: "dot" }), r.ready ? "Ready" : failed ? "Failed" : "Indexing"));
 }
 
@@ -57,9 +58,15 @@ function loadRecent(box, signal) {
 }
 
 export function render(main, route) {
-  const list = h("div", { "aria-live": "polite" }, categories(""));
+  const list = h("div", {}, categories(""));
+  // Announce a short count, not the whole list, as the visitor types.
+  const count = h("p", { class: "sr-only", role: "status" });
   const input = h("input", { type: "search", placeholder: `Search ${TOOLS.length} tools`, "aria-label": "Search tools", autocomplete: "off",
-    oninput: () => list.replaceChildren(...categories(input.value)) });
+    oninput: () => {
+      list.replaceChildren(...categories(input.value));
+      const n = filterTools(input.value).reduce((sum, [, tools]) => sum + tools.length, 0);
+      count.textContent = n ? `${n} ${n === 1 ? "tool" : "tools"}` : "No tools match";
+    } });
   const recent = h("div", { class: "rows recent" });
 
   main.append(h("div", { class: "wrap" },
@@ -68,7 +75,7 @@ export function render(main, route) {
       h("h1", {}, "Tools for understanding and reviewing GitHub code"),
       h("p", {}, "Ask how a repository works, find code by meaning, and review pull requests. Pick a tool to start.")),
     h("section", { class: "panel", "aria-label": "Popular tools" }, h("div", { class: "tiles" }, LIVE.map(tile))),
-    h("div", { class: "search" }, h("form", { class: "input", role: "search", onsubmit: (e) => e.preventDefault() }, icon("search", 18), input)),
+    h("div", { class: "search" }, h("form", { class: "input", role: "search", onsubmit: (e) => e.preventDefault() }, icon("search", 18), input), count),
     list,
     h("section", { class: "split" },
       h("div", {}, h("h2", {}, "Private by design"),

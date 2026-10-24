@@ -31,7 +31,7 @@ export async function render(main, route, onLeave) {
 
 /* ================================================================ #/review/o/n */
 function prForm(content, { owner, name, signal }) {
-  const input = h("input", { type: "text", inputmode: "numeric", placeholder: "Number or link, e.g. 1234", "aria-label": "Pull request number or link",
+  const input = h("input", { type: "text", placeholder: "Number or link, e.g. 1234", "aria-label": "Pull request number or link",
     autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-describedby": "pr-msg" });
   const msg = h("p", { id: "pr-msg", class: "invalid", hidden: true });
   const setInvalid = (text) => {
