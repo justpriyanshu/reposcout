@@ -116,7 +116,7 @@ body[data-view="ask"] main { padding-bottom: 0; }
 .chat { display: flex; flex-direction: column; max-width: 820px; min-height: calc(100vh - var(--topbar-h) - var(--s-8)); min-height: calc(100dvh - var(--topbar-h) - var(--s-8)); }
 @media (max-width: 860px) { .chat { min-height: calc(100dvh - var(--topbar-h) - 120px); } }
 .thread { flex: 1; display: flex; flex-direction: column; gap: var(--s-6); padding-bottom: var(--s-6); }
-.msg-user { align-self: flex-end; max-width: min(85%, 600px); padding: 10px var(--s-4); border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
+.msg-user { scroll-margin-top: calc(var(--topbar-h) + var(--s-4)); align-self: flex-end; max-width: min(85%, 600px); padding: 10px var(--s-4); border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
   background: var(--surface-3); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg-bot { min-width: 0; }
 .msg-bot .body { padding: var(--s-5) var(--s-6); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-sm); overflow-wrap: anywhere; }
@@ -140,6 +140,7 @@ body[data-view="ask"] main { padding-bottom: 0; }
   transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-press) var(--ease-out); }
 .starter svg { flex: none; margin-top: 2px; color: var(--text-3); }
 .starter:active { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) { .starter:active { transform: none; } }
 @media (hover: hover) and (pointer: fine) { .starter:hover { border-color: var(--border-strong); color: var(--text); } }
 .composer { position: sticky; bottom: 0; z-index: 5; padding: var(--s-3) 0 max(var(--s-4), env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 30%); }
 .composer form { align-items: flex-end; padding: var(--s-2); }
@@ -311,7 +312,10 @@ function toast(message, action, kind = "info") {
   const el = h("div", { class: `toast ${kind}`, role: kind === "error" ? "alert" : "status" },
     icon(kind === "error" ? ICONS.alert : kind === "success" ? ICONS.check : ICONS.info, 18), h("span", { class: "msg" }, message));
   let left = action ? 9000 : 6000, started = Date.now(), timer = null;
-  const close = () => { clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibility); el.remove(); };
+  const close = () => {
+    clearTimeout(timer); document.removeEventListener("visibilitychange", onVisibility);
+    el.classList.add("leaving"); setTimeout(() => el.remove(), 160);
+  };
   const pause = () => { clearTimeout(timer); left -= Date.now() - started; };
   const resume = () => { started = Date.now(); clearTimeout(timer); timer = setTimeout(close, Math.max(left, 1500)); };
   const onVisibility = () => (document.hidden ? pause() : resume());
@@ -346,6 +350,8 @@ function codeBlock(text, firstLine, maxLines) {
   return h("pre", { class: "code" }, code);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const scrollBehavior = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+const stagger = (node, i) => { node.classList.add("enter"); node.style.setProperty("--i", Math.min(i, 6)); return node; };
 
 /* ================================================================ settings / key */
 const settings = {
@@ -566,12 +572,12 @@ function loadRecent(recentList) {
   api("/api/repos").then(({ repos }) => {
     recentList.replaceChildren();
     if (!repos.length) { recentList.append(h("li", {}, stateBlock({ icon: ICONS.search, title: "Nothing explored yet", text: "Paste a repository link above and it will show up here for everyone.", compact: true }))); return; }
-    for (const r of repos) recentList.append(h("li", {}, h("a", { class: "repo-row", href: repoHash(r.owner, r.name) },
+    repos.forEach((r, i) => recentList.append(stagger(h("li", {}, h("a", { class: "repo-row", href: repoHash(r.owner, r.name) },
       h("span", { class: "name" }, r.full_name),
       h("span", { class: "desc" }, r.description || (r.ready ? `${fmt(r.files_total)} files indexed` : r.status === "failed" ? "Indexing failed" : r.stage)),
       h("span", { class: "meta" }, r.language ? h("span", {}, h("i", { class: "lang-dot" }), r.language) : null,
         r.stars ? h("span", { "aria-label": `${fmt(r.stars)} stars` }, icon(ICONS.star, 13), fmt(r.stars)) : null,
-        h("span", { class: "pill " + (r.ready ? "success" : r.status === "failed" ? "danger" : "info") }, r.ready ? "Ready" : r.status === "failed" ? "Failed" : "Indexing")))));
+        h("span", { class: "pill " + (r.ready ? "success" : r.status === "failed" ? "danger" : "info") }, r.ready ? "Ready" : r.status === "failed" ? "Failed" : "Indexing")))), i)));
   }).catch(() => recentList.replaceChildren(h("li", {}, stateBlock({ icon: ICONS.alert, tone: "error", compact: true, title: "Couldn't load recent repositories",
     actions: [h("button", { class: "btn small", type: "button", onclick: () => loadRecent(recentList) }, icon(ICONS.refresh, 14), "Try again")] }))))
     .finally(() => recentList.removeAttribute("aria-busy"));
@@ -603,7 +609,7 @@ async function viewRepo(view, owner, name, tab) {
   renderRepo(view, record, tab);
 }
 function errorCard(message, retry) {
-  return h("div", { class: "card view-card" }, stateBlock({ icon: ICONS.alert, tone: "error", title: "Something went wrong", text: message,
+  return h("div", { class: "card view-card fade-in" }, stateBlock({ icon: ICONS.alert, tone: "error", title: "Something went wrong", text: message,
     actions: [retry ? h("button", { class: "btn primary", type: "button", onclick: retry }, "Try again") : null, h("a", { class: "btn", href: "#/" }, "Back to start")].filter(Boolean) }));
 }
 const STEPS = [["queued", "Waiting for a free slot"], ["cloning", "Downloading the code"], ["indexing", "Reading and indexing files"], ["ready", "Ready to explore"]];
@@ -612,7 +618,7 @@ function showProgress(view, owner, name, record) {
   const text = h("p", { class: "card-text" }, "This happens once per repository. Small projects take under a minute; larger ones a few minutes. You can leave this page open.");
   const bar = h("div", { class: "bar indeterminate" }, h("span"));
   const steps = h("ul", { class: "steps" });
-  const card = h("div", { class: "card view-card progress-card", "aria-live": "polite" }, title, text, bar, steps);
+  const card = h("div", { class: "card view-card progress-card fade-in", "aria-live": "polite" }, title, text, bar, steps);
   view.replaceChildren(card);
   let stopped = false; onLeave(() => { stopped = true; });
   const paint = (r) => {
@@ -658,7 +664,7 @@ function renderRepo(view, r, tab) {
   const content = h("section", { "aria-label": "Workspace" });
   const banner = r.status !== "ready" ? h("div", { class: "banner" }, icon(ICONS.info, 16), "Refreshing the index in the background. Answers use the previous version until it's done.") : r.error ? h("div", { class: "banner error" }, icon(ICONS.alert, 16), `Last refresh failed: ${r.error}`) : null;
   if (banner) content.append(banner);
-  view.replaceChildren(h("div", { class: "repo-layout" }, side, content));
+  view.replaceChildren(h("div", { class: "repo-layout fade-in" }, side, content));
   if (tab === "search") return tabSearch(content, r);
   if (tab === "review") return tabReview(content, r);
   return tabAsk(content, r);
@@ -669,6 +675,7 @@ const STARTERS = ["What does this project do, and how is it organised?", "Where 
 function tabAsk(content, r) {
   const chatKey = `rs.chat.${r.key}`;
   let turns = store.get(chatKey) || [];
+  let fresh = null;
   const thread = h("div", { class: "thread", "aria-live": "polite" });
   const textarea = h("textarea", { rows: "1", placeholder: `Ask about ${r.name}…`, "aria-label": "Your question", maxlength: "2000" });
   const sendBtn = h("button", { class: "btn primary icon", type: "submit", "aria-label": "Send" }, icon(ICONS.send, 16));
@@ -694,14 +701,14 @@ function tabAsk(content, r) {
     const foot = turn.pending || turn.error ? null : h("div", { class: "foot" },
       turn.model ? h("span", {}, turn.model) : null, turn.latency_ms ? h("span", {}, `${(turn.latency_ms / 1000).toFixed(1)}s`) : null,
       copyButton(() => turn.answer));
-    return h("div", { class: "msg-bot" }, body, foot);
+    return h("div", { class: "msg-bot" + (turn === fresh ? " enter" : "") }, body, foot);
   }
   function paint() {
     thread.replaceChildren();
     if (!turns.length) {
       thread.append(h("div", { class: "chat-empty" }, h("h2", {}, `Ask anything about ${r.name}`),
         h("p", {}, "Answers come from the indexed code and link to the exact lines on GitHub."),
-        h("div", { class: "starters" }, ...STARTERS.map((q) => h("button", { class: "starter", type: "button", onclick: () => send(q) }, icon(ICONS.chat, 15), h("span", {}, q))))));
+        h("div", { class: "starters" }, ...STARTERS.map((q, i) => stagger(h("button", { class: "starter", type: "button", onclick: () => send(q) }, icon(ICONS.chat, 15), h("span", {}, q)), i)))));
       return;
     }
     for (const t of turns) thread.append(h("div", { class: "msg-user" }, t.question), botBubble(t));
@@ -713,7 +720,7 @@ function tabAsk(content, r) {
     const history = turns.filter((t) => !t.error && !t.pending).slice(-3).map((t) => ({ question: t.question, answer: t.answer }));
     const turn = { question, pending: true }; turns.push(turn);
     textarea.value = ""; grow(); paint(); sendBtn.disabled = true;
-    turn.el = thread.lastChild; turn.el.scrollIntoView({ behavior: "smooth", block: "end" });
+    turn.el = thread.lastChild; turn.el.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
     const slow = setTimeout(() => turn.el?.querySelector(".body.pending")?.append(h("span", { class: "slow-note" }, "Still working. Free keys can take a little longer.")), 8000);
     try {
       const data = await api(`/api/repos/${r.owner}/${r.name}/ask`, { method: "POST", body: { question, history }, withKey: true });
@@ -725,8 +732,9 @@ function tabAsk(content, r) {
     }
     clearTimeout(slow); delete turn.el;
     store.set(chatKey, turns.filter((t) => !t.pending).slice(-20));
-    paint(); syncSend(); textarea.focus();
-    thread.lastChild?.scrollIntoView({ behavior: "smooth", block: "start" });
+    fresh = turn; paint(); fresh = null; syncSend(); textarea.focus({ preventScroll: true });
+    // Bring the question to the top so the answer reads from its first line.
+    thread.lastChild?.previousSibling?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   }
   paint(); syncSend(); setTimeout(() => textarea.focus(), 0);
 }
@@ -742,7 +750,7 @@ function tabSearch(content, r) {
       h("header", {}, skel("sk-line short")), h("div", { class: "sk-stack" }, skel("sk-line"), skel("sk-line"), skel("sk-line short")))));
     try {
       const { results: hits } = await api(`/api/repos/${r.owner}/${r.name}/search`, { method: "POST", body: { query } });
-      results.replaceChildren(...(hits.length ? hits.map((x) => h("article", { class: "hit" },
+      results.replaceChildren(...(hits.length ? hits.map((x) => h("article", { class: "hit fade-in" },
         h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener" }, `${x.path}:${x.start_line}-${x.end_line}`), h("span", { class: "pill" }, x.name ? `${x.kind} ${x.name}` : x.language)),
         codeBlock(x.text, x.start_line, 14))) : [h("div", { class: "card" }, stateBlock({ icon: ICONS.search, compact: true, title: `No matches for “${query}”`,
           text: "Try a function or file name, or describe what the code does in other words." }))]));
@@ -820,14 +828,14 @@ async function viewReview(view, owner, name, number) {
     const data = await api("/api/review", { method: "POST", body: { url, min_severity: "nit" }, withKey: true });
     clearInterval(timer);
     store.set(cacheKey, data, true);
-    paintReview(head, body, data, () => { store.del(cacheKey); route(); });
+    paintReview(head, body, data, () => { store.del(cacheKey); route(); }, true);
   } catch (err) {
     clearInterval(timer);
     body.replaceChildren(errorCard(err.message, () => { approvedReview = id; route(); }));
     if (["no_key", "bad_key", "bad_model"].includes(err.code)) handleError(err, () => { approvedReview = id; route(); });
   }
 }
-function paintReview(head, body, data, rerun) {
+function paintReview(head, body, data, rerun, animate = false) {
   const pr = data.pull;
   head.replaceChildren(
     h("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, h("a", { href: repoHash(...pr.repo.split("/")) }, pr.repo), h("span", { "aria-hidden": "true" }, "/"), h("span", {}, `Pull request #${pr.number}`)),
@@ -886,6 +894,7 @@ function paintReview(head, body, data, rerun) {
   if (data.stats && data.stats.llm_errors) notes.push(h("div", { class: "banner error" }, icon(ICONS.alert, 16), `The AI couldn't review ${data.stats.llm_errors} file(s), usually because of rate limits. Fixed checks still ran. Try "Run again" in a minute.`));
   body.replaceChildren(verdict, ...(notes.length ? [h("div", { class: "notes" }, ...notes)] : []), list);
   paintFilters(); paintList();
+  if (animate) [...body.children, ...list.children].filter((n) => n !== list).forEach(stagger);
 }
 
 /* ================================================================ start */
