@@ -2,6 +2,7 @@
 import { h, icon, toolIcon, api, skel, stateBlock, fmt } from "./core.js";
 import { TOOLS, filterTools } from "./tools.js";
 import { toolHash } from "./links.js";
+import { config } from "./settings.js";
 
 const LIVE = TOOLS.filter((t) => t.live);
 
@@ -79,7 +80,7 @@ export function render(main, route) {
     list,
     h("section", { class: "split" },
       h("div", {}, h("h2", {}, "Private by design"),
-        h("p", {}, "RepoScout reads public code only, and you bring your own free Groq key."),
+        h("p", {}, "RepoScout reads public code only, and you bring your own free ", h("span", { "data-provider": "" }, config.provider), " key."),
         h("ul", { class: "checks" },
           ["Your key stays in your browser and is sent only with your own requests.",
             "Answers link to the exact lines on GitHub, so you can check them.",

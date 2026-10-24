@@ -134,7 +134,7 @@ export function toast(message, { action = null, kind = "info" } = {}) {
   const region = $("#toasts");
   if (!region) return () => {};
   // #toasts is already a polite live region; only errors interrupt.
-  const el = h("div", { class: `toast ${kind}`, role: kind === "error" ? "alert" : null },
+  const el = h("div", { class: `toast ${kind}`, role: kind === "error" ? "alert" : "status" },
     icon(kind === "error" ? "alert" : kind === "success" ? "check" : "info", 18), h("span", { class: "msg" }, message));
   const sticky = kind === "error" && !!action;
   let left = action ? 6000 : kind === "error" ? 6000 : 4000, started = 0, timer = null, closed = false;

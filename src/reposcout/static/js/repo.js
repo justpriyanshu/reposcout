@@ -18,7 +18,7 @@ function currentTool(fallback = "ask") {
 /** Run the router again for the same hash (a fresh GET, a fresh view). */
 const reload = () => window.dispatchEvent(new HashChangeEvent("hashchange"));
 
-const repoPath = (owner, name) => `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+export const repoPath = (owner, name) => `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 
 /* ================================================================ frame */
 let frame = null; // the frame on screen, for setAsideRepo
@@ -61,7 +61,7 @@ export function renderPicker(body, toolId) {
   const copy = toolId === "review" ? PICK.review : PICK.other;
   const input = h("input", { id: "pick-link", type: "text", name: "link", placeholder: copy.placeholder, "aria-label": "GitHub link",
     autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-describedby": "pick-msg" });
-  const msg = h("p", { id: "pick-msg", class: "invalid", hidden: true });
+  const msg = h("p", { id: "pick-msg", class: "invalid", role: "alert", hidden: true });
   const form = h("form", { class: "input", novalidate: true }, icon("link", 18), input, h("button", { class: "btn primary", type: "submit" }, "Continue"));
   const setInvalid = (text) => {
     msg.textContent = text; msg.hidden = !text;
@@ -100,6 +100,7 @@ const initials = (full) => full.replace(/[^A-Za-z0-9]/g, "").slice(0, 2);
 function metaOf(r, indexed) {
   if (!indexed) return "Not indexed. Reviews read only the changed files.";
   if (r.status === "failed") return "Indexing failed";
+  if (r.status === "unknown") return "Couldn't check the index";
   if (r.status === undefined) return "Checking the index…";
   if (!r.ready) return "Indexing now";
   const commit = (r.commit_sha || "").slice(0, 7);
@@ -238,6 +239,7 @@ export async function ensureIndexed(body, owner, name, onLeave, opts = {}) {
     }
   } catch (err) {
     if (gone()) return null;
+    note({ owner, name, full_name: full, status: "failed" }); // the bar must not keep saying "Checking the index…"
     failureCard(body, owner, name, friendlyError(err), { refresh: false, tool: toolId });
     return null;
   }
@@ -301,6 +303,6 @@ export async function mountTool(main, route, onLeave, { index = true } = {}) {
   if (route.signal?.aborted) return null;
   if (record) swap(repoBar(record, { indexed: true, tool: route.tool }));
   else if (missing) swap(repoBar({ owner, name, full_name: full }, { indexed: false, tool: route.tool }));
-  else swap(repoBar({ owner, name, full_name: full, status: "ready", ready: true }, { indexed: true, tool: route.tool })); // unknown: don't claim it is missing
+  else swap(repoBar({ owner, name, full_name: full, status: "unknown" }, { indexed: true, tool: route.tool })); // lookup failed: claim neither missing nor ready
   return { content, record };
 }

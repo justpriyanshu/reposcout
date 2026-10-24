@@ -33,7 +33,7 @@ export async function render(main, route, onLeave) {
 function prForm(content, { owner, name, signal }) {
   const input = h("input", { type: "text", placeholder: "Number or link, e.g. 1234", "aria-label": "Pull request number or link",
     autocomplete: "off", autocapitalize: "none", spellcheck: "false", "aria-describedby": "pr-msg" });
-  const msg = h("p", { id: "pr-msg", class: "invalid", hidden: true });
+  const msg = h("p", { id: "pr-msg", class: "invalid", role: "alert", hidden: true });
   const setInvalid = (text) => {
     msg.textContent = text; msg.hidden = !text;
     if (text) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
@@ -48,7 +48,8 @@ function prForm(content, { owner, name, signal }) {
   });
   input.addEventListener("input", () => { if (!msg.hidden) setInvalid(""); });
   content.replaceChildren(form, msg,
-    h("p", { class: "note" }, `The review uses your ${config.provider} key, which spends a little of your free quota. Nothing is posted to GitHub.`));
+    h("p", { class: "note" }, `The review uses your ${config.provider} key, which spends a little of your free quota. Nothing is posted to GitHub.`),
+    h("p", { class: "note" }, h("a", { href: `https://github.com/${owner}/${name}/pulls`, target: "_blank", rel: "noopener" }, "Browse open pull requests on GitHub")));
   if (matchMedia("(hover: hover)").matches) setTimeout(() => !signal.aborted && input.focus({ preventScroll: true }), 0);
 }
 
