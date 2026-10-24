@@ -361,7 +361,7 @@ def test_full_flow(api):
     page = client.get("/").text
     assert f"/static/{static_files.version()}/ui.css" in page and "{{" not in page
     css = client.get(f"/static/{static_files.version()}/ui.css")
-    assert css.headers["content-type"].startswith("text/css") and "--accent" in css.text
+    assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
     assert client.get("/api/config").json()["provider"] == "Groq"
 
     resp = client.post("/api/repos", json={"url": "https://github.com/Octo/Shop"})

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -59,3 +61,39 @@ def test_ui_css_alias(client):
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/css")
     assert static_files.version()
+
+
+def _css():
+    return (Path(static_files.__file__).parent / "static" / "ui.css").read_text()
+
+
+def test_stylesheet_defines_the_design_tokens():
+    css = _css()
+    for needle in (
+        "--t-sm: 14px",
+        "--t-base: 16px",
+        "--t-lg: 20px",
+        "--t-xl: clamp(30px, 4.2vw, 44px)",
+        "--blue: #0D59F2",
+        "--ink:",
+        "--panel:",
+        '[data-theme="dark"]',
+        "prefers-reduced-motion",
+        "pointer: coarse",
+    ):
+        assert needle in css, needle
+
+
+def test_no_third_party_fonts():
+    static_dir = Path(static_files.__file__).parent / "static"
+    for name in ALLOWED:
+        text = (static_dir / name).read_text(errors="ignore")
+        assert "fonts.googleapis" not in text and "fonts.gstatic" not in text, name
+    assert "fonts.googleapis" not in _css()
+
+
+def test_caddy_csp_has_no_inline_scripts():
+    caddy = Path(__file__).resolve().parents[1] / "deploy" / "Caddyfile"
+    line = next(ln for ln in caddy.read_text().splitlines() if "Content-Security-Policy" in ln)
+    assert "script-src 'self';" in line
+    assert "fonts.googleapis" not in line and "fonts.gstatic" not in line

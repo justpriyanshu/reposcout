@@ -160,7 +160,7 @@ def test_health_stats_and_ui(app_parts):
     page = client.get("/").text
     assert f"/static/{static_files.version()}/ui.css" in page and "{{" not in page
     css = client.get(f"/static/{static_files.version()}/ui.css")
-    assert css.headers["content-type"].startswith("text/css") and "--accent" in css.text
+    assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
     assert "GET /health" in client.get("/stats").json()["requests"]
 
 
