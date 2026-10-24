@@ -4,6 +4,7 @@ import { TOOLS, tool, pickerRepos, EXAMPLES } from "./tools.js";
 import { parseLink, toolHash } from "./links.js";
 
 const POLL_MS = 1500;
+const MAX_MISSES = 8; // consecutive failed polls before giving up
 const STEPS = [["queued", "Waiting for a free slot"], ["cloning", "Downloading the code"], ["indexing", "Reading and indexing files"], ["ready", "Ready"]];
 
 /** The tool whose page is showing, read from the hash ("#/ask/o/n" -> "ask"); used for "Change" and "Pick another". */
@@ -113,7 +114,7 @@ export function repoBar(record, { indexed = true, tool: toolId } = {}) {
   wrap.append(h("div", { class: "repobar" }, h("span", { class: "av", "aria-hidden": "true" }, initials(full)),
     h("span", { class: "nm", title: full }, full), h("span", { class: "meta" }, metaOf(record, indexed)), acts));
 
-  if (indexed) {
+  if (indexed && record.status !== "failed") {
     const refresh = h("button", { class: "btn icon", type: "button", "aria-label": "Refresh index", title: "Refresh index" }, icon("refresh", 16));
     refresh.addEventListener("click", async () => {
       refresh.disabled = true;
@@ -124,14 +125,16 @@ export function repoBar(record, { indexed = true, tool: toolId } = {}) {
       refresh.disabled = false;
     });
     acts.append(refresh);
-  } else {
+  } else if (!indexed) {
     const index = h("button", { class: "btn", type: "button" }, "Index it");
     index.addEventListener("click", async () => {
       index.disabled = true;
       try {
         const { repo } = await api("/api/repos", { method: "POST", body: { url: full } });
         toast("Indexing started. You can keep reviewing meanwhile.");
-        wrap.replaceWith(repoBar(repo, { indexed: true, tool: tid }));
+        const next = repoBar(repo, { indexed: true, tool: tid });
+        wrap.replaceWith(next);
+        next.querySelector(".acts .btn")?.focus(); // keep keyboard focus on the bar
       } catch (err) { toast(friendlyError(err), { kind: "error" }); index.disabled = false; }
     });
     acts.append(index);
@@ -175,17 +178,25 @@ function indexingCard(full) {
   const fill = h("span");
   const bar = h("div", { class: "bar wait", role: "progressbar", "aria-label": "Indexing progress", "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
   const steps = h("ul", { class: "steps" });
-  const card = h("section", { class: "progress enter", "aria-live": "polite" }, h("h2", {}, `Getting ${full} ready`),
-    h("p", {}, "This happens once per repository. You can leave this page open, or come back later."), bar, steps);
+  const status = h("p", { class: "sr-only", role: "status" }); // announced only when the step changes
+  const card = h("section", { class: "progress enter" }, h("h2", {}, `Getting ${full} ready`),
+    h("p", {}, "This happens once per repository. You can leave this page open, or come back later."), bar, steps, status);
+  let shownStep = -1, shownText = "";
   return {
     card,
     paint(r) {
       const at = Math.max(0, STEPS.findIndex(([k]) => k === r.status));
-      steps.replaceChildren(...STEPS.map(([key, label], i) => {
-        const done = i < at || (i === at && key === "ready");
-        return h("li", { class: done ? "done" : i === at ? "now" : "", "aria-current": i === at ? "step" : null },
-          h("span", { class: "mk" }, done ? icon("check", 11) : null), stepLabel(key, label, r));
-      }));
+      const labels = STEPS.map(([key, label]) => stepLabel(key, label, r));
+      const text = `${at}|${labels.join("|")}`;
+      if (text !== shownText) { // rebuild only when something visible changed
+        shownText = text;
+        steps.replaceChildren(...STEPS.map(([key], i) => {
+          const done = i < at || (i === at && key === "ready");
+          return h("li", { class: done ? "done" : i === at ? "now" : "", "aria-current": i === at ? "step" : null },
+            h("span", { class: "mk" }, done ? icon("check", 11) : null), labels[i]);
+        }));
+      }
+      if (at !== shownStep) { shownStep = at; status.textContent = STEPS[at][1]; }
       if (r.status === "indexing" && r.files_total > 0) {
         const part = Math.min(1, Math.max(0, r.files_done / r.files_total));
         bar.classList.remove("wait");
@@ -236,11 +247,17 @@ export async function ensureIndexed(body, owner, name, onLeave, opts = {}) {
   const view = indexingCard(record.full_name || full);
   view.paint(record);
   body.replaceChildren(view.card);
+  let misses = 0;
   for (;;) {
     await sleep(POLL_MS);
     if (gone()) return null;
-    try { record = (await api(repoPath(owner, name))).repo; }
-    catch { continue; } // a blip: keep polling
+    try { record = (await api(repoPath(owner, name))).repo; misses = 0; }
+    catch (err) {
+      if (gone()) return null;
+      if (++misses < MAX_MISSES) continue; // a blip: keep polling
+      failureCard(body, owner, name, friendlyError(err), { refresh: false, tool: toolId });
+      return null;
+    }
     if (gone()) return null;
     if (record.ready) { note(record); return record; }
     if (record.status === "failed") { note(record); failureCard(body, owner, name, record.error, { refresh: true, tool: toolId }); return null; }
