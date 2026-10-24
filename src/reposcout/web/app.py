@@ -304,9 +304,7 @@ def create_public_app(
     def page() -> str:
         return static_files.page("app.html")
 
-    @app.get("/ui.css", include_in_schema=False)
-    def ui_css():
-        return static_files.stylesheet()
+    static_files.add_routes(app)
 
     # Async so they answer even when every worker thread is busy.
     @app.get("/api/health")

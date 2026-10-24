@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from reposcout import static_files
 from reposcout.embeddings import HashingEmbedder
 from reposcout.web.app import create_public_app
 from reposcout.web.config import PublicSettings
@@ -358,8 +359,8 @@ def test_full_flow(api):
     client, ws, groq, _ = api
     assert "RepoScout" in client.get("/").text
     page = client.get("/").text
-    assert "/ui.css?v=" in page and "{{asset_version}}" not in page
-    css = client.get("/ui.css")
+    assert f"/static/{static_files.version()}/ui.css" in page and "{{" not in page
+    css = client.get(f"/static/{static_files.version()}/ui.css")
     assert css.headers["content-type"].startswith("text/css") and "--accent" in css.text
     assert client.get("/api/config").json()["provider"] == "Groq"
 

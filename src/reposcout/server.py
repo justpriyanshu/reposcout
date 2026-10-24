@@ -125,9 +125,7 @@ def create_app(
     def ui() -> str:
         return static_files.page("index.html")
 
-    @app.get("/ui.css", include_in_schema=False)
-    def ui_css():
-        return static_files.stylesheet()
+    static_files.add_routes(app)
 
     @app.get("/health")
     def health() -> dict:

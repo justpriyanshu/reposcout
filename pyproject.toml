@@ -33,7 +33,7 @@ reposcout = "reposcout.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-reposcout = ["static/*.html", "static/*.css"]
+reposcout = ["static/*.html", "static/*.css", "static/js/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
