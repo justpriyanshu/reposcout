@@ -11,179 +11,206 @@
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/ui.css?v={{asset_version}}">
 <style>
-/* ---------- top bar ---------- */
-.topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(8px); border-bottom: 1px solid var(--border); }
-.topbar-inner { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.12rem; letter-spacing: -.01em; }
+/* ---------- shell ---------- */
+.container { max-width: 1200px; margin: 0 auto; padding-inline: max(var(--gutter), env(safe-area-inset-left)) max(var(--gutter), env(safe-area-inset-right)); }
+:root { --gutter: var(--s-4); }
+@media (min-width: 720px) { :root { --gutter: var(--s-6); } }
+.topbar { position: sticky; top: 0; z-index: 20; height: var(--topbar-h); border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 85%, transparent); -webkit-backdrop-filter: saturate(1.4) blur(10px); backdrop-filter: saturate(1.4) blur(10px); }
+.topbar-inner { height: 100%; display: flex; align-items: center; gap: var(--s-3); }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-size: var(--text-base); font-weight: 650; letter-spacing: -0.01em; border-radius: var(--r-sm); }
 .brand svg { flex: none; }
-.key-pill { display: inline-flex; align-items: center; gap: 8px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--major); flex: none; }
-.dot.on { background: var(--success); }
-.key-pill .label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.key-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex: none; }
+.key-pill .dot.on { background: var(--success); }
+.key-pill .label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 .key-pill .short { display: none; }
 @media (max-width: 560px) { .key-pill .label { display: none; } .key-pill .short { display: inline; } }
-
-main { max-width: 1180px; margin: 0 auto; padding: 0 16px 80px; }
+main { padding-bottom: var(--s-16); }
 main:focus { outline: none; }
+footer.site { padding-top: var(--s-6); padding-bottom: max(var(--s-8), env(safe-area-inset-bottom)); color: var(--text-3); font-size: var(--text-xs); }
+footer.site p { padding-top: var(--s-6); border-top: 1px solid var(--border); }
+body[data-view="ask"] footer.site { display: none; }
+body[data-view="ask"] main { padding-bottom: 0; }
 
 /* ---------- home ---------- */
-.home { max-width: 760px; margin: 0 auto; padding-top: 9vh; }
-.home h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.08; letter-spacing: -.03em; margin: 0 0 14px; font-weight: 700; }
-.home .lede { color: var(--text-2); font-size: 1.13rem; margin: 0 0 30px; max-width: 600px; }
+.home { max-width: 720px; margin: 0 auto; padding-top: clamp(40px, 9vh, 96px); }
+.home h1 { font-size: var(--text-2xl); line-height: 1.06; letter-spacing: -0.03em; font-weight: 700; text-wrap: balance; }
+.home .lede { margin-top: var(--s-4); max-width: 56ch; color: var(--text-2); font-size: var(--text-lede); line-height: 1.55; text-wrap: pretty; }
+.linkbox { margin-top: var(--s-8); }
 .linkbox > svg { margin-left: 10px; flex: none; color: var(--text-3); }
 .linkbox > input { height: 44px; }
-.detect { min-height: 28px; margin: 10px 4px 0; font-size: .92rem; color: var(--text-3); display: flex; align-items: center; gap: 8px; }
-.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; color: var(--text-3); font-size: .92rem; }
-.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin: 48px 0 0; padding: 22px 0 0; border-top: 1px solid var(--border); }
-.how h3 { margin: 0 0 4px; font-size: 1rem; }
-.how p { margin: 0; color: var(--text-2); font-size: .93rem; }
-@media (max-width: 640px) { .how { grid-template-columns: 1fr; gap: 14px; } }
-.recent { margin-top: 44px; }
-.recent h2 { font-size: 1rem; margin: 0 0 10px; color: var(--text-2); font-weight: 600; }
-.repo-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.detect { display: flex; align-items: center; gap: var(--s-2); min-height: 24px; margin: var(--s-3) var(--s-2) 0; font-size: var(--text-sm); color: var(--text-2); }
+.detect .mono { font-size: var(--text-sm); }
+.examples { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+.examples .label { margin-right: var(--s-1); font-size: var(--text-sm); font-weight: 500; color: var(--text-3); }
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-6); margin-top: var(--s-12); }
+@media (max-width: 640px) { .features { grid-template-columns: 1fr; gap: var(--s-5); } }
+.feature { display: grid; grid-template-columns: auto 1fr; column-gap: var(--s-3); row-gap: 2px; align-items: start; }
+.feature .ic { grid-row: span 2; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--border); color: var(--accent-text); box-shadow: var(--shadow-sm); }
+.feature h3 { font-size: var(--text-md); font-weight: 600; letter-spacing: 0; line-height: var(--leading-snug); padding-top: 6px; }
+.feature p { font-size: var(--text-sm); color: var(--text-2); line-height: 1.5; }
+.recent { margin-top: var(--s-12); }
+.recent-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--s-3); }
+.recent-head h2 { font-size: var(--text-md); font-weight: 600; letter-spacing: 0; color: var(--text-2); }
+.repo-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; }
 .repo-list li + li { border-top: 1px solid var(--border); }
-.repo-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 12px 16px; text-decoration: none; color: var(--text); }
-.repo-row:hover { background: var(--surface-2); }
-.repo-row .name { font-weight: 600; font-family: var(--mono); font-size: .93rem; overflow-wrap: anywhere; }
-.repo-row .desc { grid-column: 1; color: var(--text-3); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.repo-row .meta { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--text-3); font-size: .85rem; display: flex; gap: 12px; align-items: center; }
-.empty-note { color: var(--text-3); font-size: .92rem; padding: 14px 16px; }
+.repo-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-4); row-gap: 2px; padding: var(--s-3) var(--s-4); color: var(--text); text-decoration: none; transition: background-color var(--dur-fast) ease; }
+.repo-row:focus-visible { outline-offset: -2px; border-radius: 0; }
+@media (hover: hover) and (pointer: fine) { .repo-row:hover { background: var(--surface-2); } }
+.repo-row .name { font: 600 var(--text-md)/1.4 var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-row .desc { grid-column: 1; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-row .meta { grid-row: 1 / span 2; grid-column: 2; display: flex; align-items: center; gap: var(--s-4); font-size: var(--text-sm); color: var(--text-3); }
+.repo-row .meta > span:not(.pill) { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.lang-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+@media (max-width: 560px) {
+  .repo-row { grid-template-columns: minmax(0, 1fr); }
+  .repo-row .meta { grid-row: auto; grid-column: 1; margin-top: var(--s-2); gap: var(--s-3); }
+  .repo-row .meta .pill { margin-left: auto; }
+}
+.empty-note { padding: var(--s-4); font-size: var(--text-md); color: var(--text-3); }
 
 /* ---------- repo layout ---------- */
-.repo-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; padding-top: 24px; }
-@media (max-width: 860px) { .repo-layout { grid-template-columns: 1fr; gap: 14px; padding-top: 14px; } }
-.side { align-self: start; position: sticky; top: 76px; }
-@media (max-width: 860px) { .side { position: static; } }
-.side .repo-name { font-family: var(--mono); font-weight: 600; font-size: 1rem; overflow-wrap: anywhere; margin: 0 0 6px; }
-.side .repo-name a { color: var(--text); text-decoration: none; }
-.side .repo-name a:hover { text-decoration: underline; }
-.side .desc { color: var(--text-2); font-size: .92rem; margin: 0 0 12px; }
-.facts { list-style: none; padding: 0; margin: 0 0 14px; font-size: .88rem; color: var(--text-3); display: grid; gap: 4px; }
-.facts b { color: var(--text-2); font-weight: 600; }
-.tabs { display: grid; gap: 2px; margin: 0 0 14px; }
-@media (max-width: 860px) { .tabs { grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-2); padding: 3px; border-radius: 9px; } }
-.tab { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: var(--text-2); text-decoration: none; font-weight: 500; }
-.tab:hover { background: var(--surface-2); color: var(--text); }
-.tab[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-@media (max-width: 860px) { .tab { justify-content: center; padding: 7px 8px; font-size: .92rem; } .tab svg { display: none; } .tab[aria-current="page"] { background: var(--surface); } }
-.side-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-@media (max-width: 860px) { .side .desc, .side .facts { display: none; } .side-actions { display: none; } }
+.repo-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--s-10); padding-top: var(--s-8); }
+.side { position: sticky; top: calc(var(--topbar-h) + var(--s-8)); align-self: start; display: grid; gap: var(--s-5); }
+.repo-title { display: flex; align-items: center; gap: 6px; min-width: 0; font: 600 var(--text-base)/1.35 var(--mono); }
+.repo-title a { color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.repo-title a:hover { text-decoration: underline; }
+.side .desc { margin-top: calc(var(--s-3) * -1); font-size: var(--text-md); color: var(--text-2); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--text-sm); color: var(--text-3); }
+.facts li { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.facts li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facts svg { flex: none; }
+.tabs { display: grid; gap: 2px; }
+.tab { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 var(--s-3); border: 1px solid transparent; border-radius: var(--r-md);
+  color: var(--text-2); font-size: var(--text-md); font-weight: 500; text-decoration: none; white-space: nowrap;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease; }
+.tab svg { color: var(--text-3); }
+@media (hover: hover) and (pointer: fine) { .tab:hover { background: var(--surface-2); color: var(--text); } }
+.tab[aria-current="page"] { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-sm); color: var(--text); font-weight: 600; }
+.tab[aria-current="page"] svg { color: var(--accent-text); }
+.side-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+@media (max-width: 860px) {
+  .repo-layout { grid-template-columns: minmax(0, 1fr); gap: var(--s-5); padding-top: var(--s-4); }
+  .side { position: static; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-3); align-items: center; }
+  .side .desc, .side .facts { display: none; }
+  .side-actions { grid-row: 1; grid-column: 2; flex-wrap: nowrap; }
+  .side-actions .btn-label { display: none; }
+  .side-actions .btn { width: var(--btn-h); padding: 0; }
+  .tabs { grid-column: 1 / -1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 3px; border-radius: var(--r-lg); background: var(--surface-3); }
+  .tab { justify-content: center; height: 32px; padding: 0 var(--s-2); }
+  .tab svg { display: none; }
+}
 
 /* ---------- progress ---------- */
 .view-card { max-width: 600px; margin-top: var(--s-8); }
 .progress-card .bar { margin-top: var(--s-5); }
-.steps { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; font-size: .94rem; }
-.steps li { display: flex; gap: 10px; align-items: center; color: var(--text-3); }
-.steps li .mark { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); flex: none; display: grid; place-items: center; font-size: 11px; }
+.steps { list-style: none; margin: var(--s-5) 0 0; padding: 0; display: grid; gap: 10px; font-size: var(--text-md); }
+.steps li { display: flex; align-items: center; gap: 10px; color: var(--text-3); }
+.steps .mark { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border: 1.5px solid var(--border-strong); border-radius: 50%; }
 .steps li.done { color: var(--text-2); }
-.steps li.done .mark { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.steps li.done .mark { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .steps li.now { color: var(--text); font-weight: 600; }
-.steps li.now .mark { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+.steps li.now .mark { border-color: var(--accent); border-right-color: transparent; animation: spin 700ms linear infinite; }
 
 /* ---------- chat ---------- */
-.chat { display: flex; flex-direction: column; min-height: calc(100vh - 120px); }
-.thread { flex: 1; display: flex; flex-direction: column; gap: 22px; padding-bottom: 20px; }
-.msg-user { align-self: flex-end; max-width: 80%; background: var(--accent); color: var(--accent-fg); padding: 10px 14px; border-radius: 14px 14px 4px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg-bot { max-width: 100%; }
-.msg-bot .body { background: var(--surface); border: 1px solid var(--border); border-radius: 4px 14px 14px 14px; padding: 14px 18px; overflow-wrap: anywhere; }
-.msg-bot .foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: .84rem; color: var(--text-3); }
-.sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.src { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); font: 500 .8rem var(--mono); color: var(--text-2); text-decoration: none; }
-.src:hover { border-color: var(--accent); color: var(--accent); }
-.src .n { font-weight: 700; color: var(--accent); }
-.src.uncited { opacity: .72; }
-.src .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cite { display: inline-block; min-width: 1.35em; padding: 0 .3em; margin: 0 1px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font: 600 .78em var(--mono); text-align: center; text-decoration: none; vertical-align: .08em; }
-.thinking { display: inline-flex; gap: 5px; padding: 6px 2px; }
-.thinking i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); animation: blink 1.2s infinite; }
-.thinking i:nth-child(2) { animation-delay: .2s; } .thinking i:nth-child(3) { animation-delay: .4s; }
+.chat { display: flex; flex-direction: column; max-width: 820px; min-height: calc(100vh - var(--topbar-h) - var(--s-8)); min-height: calc(100dvh - var(--topbar-h) - var(--s-8)); }
+@media (max-width: 860px) { .chat { min-height: calc(100dvh - var(--topbar-h) - 120px); } }
+.thread { flex: 1; display: flex; flex-direction: column; gap: var(--s-6); padding-bottom: var(--s-6); }
+.msg-user { align-self: flex-end; max-width: min(85%, 600px); padding: 10px var(--s-4); border-radius: var(--r-xl) var(--r-xl) var(--r-sm) var(--r-xl);
+  background: var(--surface-3); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-bot { min-width: 0; }
+.msg-bot .body { padding: var(--s-5) var(--s-6); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-sm); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .msg-bot .body { padding: var(--s-4); } }
+.msg-bot .body.pending { display: inline-flex; padding: var(--s-4) var(--s-5); }
+.msg-bot .body.failed { padding: 0; border: 0; background: none; box-shadow: none; }
+.msg-bot .foot { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-top: var(--s-2); padding: 0 var(--s-2); font-size: var(--text-xs); color: var(--text-3); }
+.cite { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin: 0 1px; padding: 0 4px; border-radius: 5px;
+  background: var(--accent-soft); color: var(--accent-text); font: 600 11px/1 var(--mono); text-decoration: none; vertical-align: 0.12em; }
+.thinking { display: inline-flex; gap: 5px; padding: 4px 0; }
+.thinking i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); animation: blink 1.2s infinite; }
+.thinking i:nth-child(2) { animation-delay: .15s; } .thinking i:nth-child(3) { animation-delay: .3s; }
 @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
-.starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0 0; }
-@media (max-width: 560px) { .starters { grid-template-columns: 1fr; } }
-.starter { text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-lg); padding: 12px 14px; cursor: pointer; color: var(--text-2); }
-.starter:hover { border-color: var(--accent); color: var(--text); }
-.chat-empty h2 { font-size: 1.35rem; margin: 6px 0 4px; letter-spacing: -.01em; }
-.chat-empty p { color: var(--text-2); margin: 0 0 12px; }
-.composer { position: sticky; bottom: 0; padding: 12px 0 16px; background: linear-gradient(to bottom, transparent, var(--bg) 22%); }
-.composer form { display: flex; gap: 8px; align-items: flex-end; background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 8px; box-shadow: var(--shadow-md); }
-.composer form:focus-within { border-color: var(--accent); }
-.composer textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 8px 8px; max-height: 200px; line-height: 1.5; }
-.composer .hint { font-size: .8rem; color: var(--text-3); margin: 6px 6px 0; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.chat-empty { padding-top: var(--s-2); }
+.chat-empty h2 { font-size: var(--text-xl); letter-spacing: -0.02em; text-wrap: balance; }
+.chat-empty p { margin-top: var(--s-2); color: var(--text-2); }
+.starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); margin-top: var(--s-6); }
+@media (max-width: 560px) { .starters { grid-template-columns: minmax(0, 1fr); } }
+.starter { display: flex; align-items: flex-start; gap: 10px; padding: 14px var(--s-4); border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text-2); font-size: var(--text-md); line-height: 1.45; text-align: left; cursor: pointer;
+  transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-press) var(--ease-out); }
+.starter svg { flex: none; margin-top: 2px; color: var(--text-3); }
+.starter:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) { .starter:hover { border-color: var(--border-strong); color: var(--text); } }
+.composer { position: sticky; bottom: 0; z-index: 5; padding: var(--s-3) 0 max(var(--s-4), env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, var(--bg) 30%); }
+.composer form { align-items: flex-end; padding: var(--s-2); }
+.composer textarea { align-self: center; max-height: 200px; padding: 6px var(--s-2); line-height: 1.5; resize: none; }
+.composer .hint { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); flex-wrap: wrap; margin: var(--s-2) var(--s-2) 0; font-size: var(--text-xs); color: var(--text-3); }
+@media (hover: none) { .composer .keys { display: none; } .composer .hint { justify-content: flex-end; } }
 
 /* ---------- markdown ---------- */
+.md { line-height: 1.65; }
 .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
-.md p { margin: 0 0 .8em; }
-.md h1, .md h2, .md h3, .md h4 { font-size: 1.02rem; margin: 1.1em 0 .45em; }
-.md ul, .md ol { margin: 0 0 .8em; padding-left: 1.35em; }
-.md li { margin: .2em 0; }
-.md code { font-size: .86em; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; }
-.md pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 12px 14px; overflow-x: auto; font-size: .84rem; line-height: 1.55; margin: 0 0 .9em; }
-.md pre code { background: none; padding: 0; font-size: inherit; }
-.md table { border-collapse: collapse; margin: 0 0 .9em; font-size: .9rem; display: block; overflow-x: auto; }
-.md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
-.md th { background: var(--surface-2); }
-.md blockquote { margin: 0 0 .8em; padding-left: 12px; border-left: 3px solid var(--border); color: var(--text-2); }
-
-/* ---------- search ---------- */
-.searchbar { display: flex; gap: 8px; margin-bottom: 18px; }
-.hit { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); margin-bottom: 12px; overflow: hidden; }
-.hit header { display: flex; justify-content: space-between; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: .88rem; }
-.hit header a { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; }
-.hit header span { color: var(--text-3); white-space: nowrap; }
-.hit pre { margin: 0; padding: 12px 14px; font-size: .82rem; line-height: 1.55; overflow-x: auto; background: var(--surface-2); }
+.md p { margin: 0 0 .85em; }
+.md h3 { margin: 1.4em 0 .5em; font-size: var(--text-base); font-weight: 650; letter-spacing: 0; }
+.md ul, .md ol { margin: 0 0 .85em; padding-left: 1.4em; }
+.md li { margin: .25em 0; }
+.md li::marker { color: var(--text-3); }
+.md code { padding: .12em .38em; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-2); font-size: .85em; }
+.md pre { margin: 0 0 1em; padding: var(--s-3) var(--s-4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); font-size: var(--text-sm); line-height: 1.6; overflow-x: auto; }
+.md pre code { padding: 0; border: 0; background: none; font-size: inherit; }
+.md table { display: block; max-width: 100%; margin: 0 0 1em; overflow-x: auto; border-collapse: collapse; font-size: var(--text-md); }
+.md th, .md td { padding: 6px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.md th { background: var(--surface-2); font-weight: 600; }
+.md blockquote { margin: 0 0 .85em; padding-left: var(--s-3); border-left: 3px solid var(--border-strong); color: var(--text-2); }
 
 /* ---------- review ---------- */
-.review-head { padding-top: 26px; }
-.crumbs { font-size: .9rem; color: var(--text-3); margin-bottom: 8px; }
-.crumbs a { color: var(--text-3); }
-.review-head h1 { font-size: clamp(1.4rem, 3vw, 1.9rem); line-height: 1.2; letter-spacing: -.02em; margin: 0 0 8px; overflow-wrap: anywhere; }
-.review-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--text-3); font-size: .92rem; align-items: center; }
-.plus { color: var(--success); font-weight: 600; } .minus { color: var(--critical); font-weight: 600; }
-.verdict { margin: 22px 0 16px; padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.verdict .big { font-size: 1.12rem; font-weight: 700; }
-.filters { display: flex; gap: 6px; flex-wrap: wrap; }
-.sev-critical { --tone: var(--critical); --tone-soft: var(--critical-soft); }
-.sev-major { --tone: var(--major); --tone-soft: var(--major-soft); }
-.sev-minor { --tone: var(--minor); --tone-soft: var(--minor-soft); }
-.sev-nit { --tone: var(--nit); --tone-soft: var(--nit-soft); }
-.chip.sev { font-weight: 600; text-transform: capitalize; }
+.review { max-width: 920px; }
+.review-head { padding-top: var(--s-8); }
+.crumbs { display: flex; flex-wrap: wrap; gap: 6px; font-size: var(--text-sm); color: var(--text-3); }
+.crumbs a { color: var(--text-2); font-family: var(--mono); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.review-head h1 { margin-top: var(--s-2); font-size: var(--text-xl); letter-spacing: -0.02em; overflow-wrap: anywhere; text-wrap: balance; }
+.review-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin-top: var(--s-3); font-size: var(--text-sm); color: var(--text-3); }
+.review-meta a { display: inline-flex; align-items: center; gap: 4px; }
+.diffstat { font-family: var(--mono); font-size: var(--text-xs); }
+.plus { color: var(--success); font-weight: 600; } .minus { color: var(--danger); font-weight: 600; }
+.verdict { margin-top: var(--s-6); padding: var(--s-5); }
+.verdict-top { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-3); }
+.verdict .big { font-size: var(--text-lg); font-weight: 650; letter-spacing: -0.01em; }
+.verdict .ok-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--success-soft); color: var(--success); }
+.verdict-actions { display: flex; gap: var(--s-2); margin-left: auto; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-4); }
+.chip.sev { font-weight: 600; }
+.chip.sev .count { font-variant-numeric: tabular-nums; }
 .chip.sev[aria-pressed="true"] { background: var(--tone-soft); border-color: color-mix(in srgb, var(--tone) 30%, transparent); color: var(--tone); }
 .chip.sev[aria-pressed="false"] { color: var(--text-3); }
-.file-group { margin: 0 0 18px; }
-.file-group h3 { font: 600 .92rem var(--mono); margin: 0 0 4px; overflow-wrap: anywhere; }
-.file-group .summary { color: var(--text-3); font-size: .9rem; margin: 0 0 10px; }
-.finding { border: 1px solid var(--border); border-left-width: 4px; border-radius: 9px; background: var(--surface); padding: 12px 16px; margin-bottom: 10px; }
-.finding.critical { border-left-color: var(--critical); } .finding.major { border-left-color: var(--major); }
-.finding.minor { border-left-color: var(--minor); } .finding.nit { border-left-color: var(--nit); }
-.finding .top { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
-.finding .title { font-weight: 600; }
-.finding .where { margin-left: auto; font: 500 .82rem var(--mono); }
-.finding p { margin: 6px 0 0; color: var(--text-2); }
-.finding pre { margin: 10px 0 0; background: var(--surface-2); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: .82rem; }
-.finding .by { margin-top: 8px; font-size: .78rem; color: var(--text-3); }
-.clean { text-align: center; padding: 36px 16px; }
-.clean .big { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
-.pr-form { display: flex; gap: 8px; max-width: 560px; }
+.notes { display: grid; gap: var(--s-3); margin-top: var(--s-4); }
+#view .notes .banner { margin: 0; }
+.file-group { margin-top: var(--s-8); }
+.file-head { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.file-head h3 { min-width: 0; font: 600 var(--text-md)/1.4 var(--mono); letter-spacing: 0; overflow-wrap: anywhere; }
+.file-group .summary { margin-top: var(--s-1); font-size: var(--text-sm); color: var(--text-2); }
+.findings { display: grid; gap: var(--s-3); margin-top: var(--s-3); }
+.pr-form { display: flex; gap: var(--s-2); max-width: 480px; }
 
-/* ---------- dialog, toast ---------- */
+/* ---------- small shared bits ---------- */
 .section-title { font-size: var(--text-lg); }
-.section-lede { color: var(--text-2); margin: var(--s-2) 0 var(--s-5); max-width: 62ch; }
+.section-lede { max-width: 62ch; margin: var(--s-2) 0 var(--s-5); color: var(--text-2); }
 .section-link { margin-top: var(--s-4); font-size: var(--text-md); }
-.note { color: var(--text-3); font-size: var(--text-sm); }
+.note { font-size: var(--text-sm); color: var(--text-3); }
 .check.field-gap { margin: var(--s-5) 0 var(--s-4); }
 .privacy { margin: 0; }
 #view .banner { margin-bottom: var(--s-4); }
 #view .banner:last-child { margin-bottom: 0; }
-.loading-center { display: grid; place-items: center; padding: 60px 0; color: var(--text-3); }
-footer.site { max-width: 1180px; margin: 0 auto; padding: 0 16px 28px; color: var(--text-3); font-size: .84rem; }
+.loading-center { display: grid; place-items: center; padding: var(--s-16) 0; color: var(--text-3); }
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="topbar-inner">
+  <div class="topbar-inner container">
     <a class="brand" href="#/" aria-label="RepoScout home">
-      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="14" cy="14" r="6.5" fill="none" stroke="var(--accent-fg)" stroke-width="3"/><path d="M19 19l6 6" stroke="var(--accent-fg)" stroke-width="3" stroke-linecap="round"/></svg>
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="14" cy="14" r="6.5" fill="none" stroke="var(--accent-fg)" stroke-width="3"/><path d="M19 19l6 6" stroke="var(--accent-fg)" stroke-width="3" stroke-linecap="round"/></svg>
       RepoScout
     </a>
     <span class="spacer"></span>
@@ -191,8 +218,8 @@ footer.site { max-width: 1180px; margin: 0 auto; padding: 0 16px 28px; color: va
   </div>
 </header>
 
-<main id="view" tabindex="-1"></main>
-<footer class="site">RepoScout reads public code only. Your API key stays in your browser and is sent only with your own requests.</footer>
+<main id="view" class="container" tabindex="-1"></main>
+<footer class="site container"><p>RepoScout reads public code only. Your API key stays in your browser and is sent only with your own requests.</p></footer>
 <div id="toasts" role="status" aria-live="polite"></div>
 
 <dialog id="settings" aria-labelledby="settingsTitle">
@@ -216,7 +243,7 @@ footer.site { max-width: 1180px; margin: 0 auto; padding: 0 16px 28px; color: va
       <span class="field-msg" id="keyMsg" aria-live="polite"></span>
     </div>
     <label class="check field-gap"><input type="checkbox" id="rememberKey"> <span>Remember on this device. Leave unticked on shared computers; the key is then forgotten when you close the tab.</span></label>
-    <p class="banner privacy">Your key never gets saved on the server. It's sent over HTTPS with each request you make and used only for that request.</p>
+    <p class="banner privacy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Your key never gets saved on the server. It's sent over HTTPS with each request you make and used only for that request.</span></p>
     <div class="dlg-actions">
       <button class="btn ghost" type="button" id="forgetKey">Remove key</button>
       <button class="btn" value="cancel" formnovalidate>Cancel</button>
@@ -256,6 +283,14 @@ const ICONS = {
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>',
+  refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+  bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 14h.01M15 14h.01"/>',
+  shield: '<path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/>',
 };
 const store = {
   get(k, session = false) { try { return JSON.parse((session ? sessionStorage : localStorage).getItem(k)); } catch { return null; } },
@@ -278,6 +313,22 @@ function toast(message, action, kind = "info") {
   resume();
 }
 const fmt = (n) => Number(n || 0).toLocaleString();
+function copyButton(getText) {
+  const label = h("span", {}, "Copy");
+  const btn = h("button", { class: "btn ghost small", type: "button" }, icon(ICONS.copy, 13), label);
+  let reset = null;
+  btn.addEventListener("click", () => navigator.clipboard?.writeText(getText()).then(() => {
+    btn.replaceChildren(icon(ICONS.check, 13), label); label.textContent = "Copied";
+    clearTimeout(reset); reset = setTimeout(() => { btn.replaceChildren(icon(ICONS.copy, 13), label); label.textContent = "Copy"; }, 1600);
+  }));
+  return btn;
+}
+function codeBlock(text, firstLine, maxLines) {
+  const lines = text.split("\n"); const shown = lines.slice(0, maxLines);
+  const code = h("code", {}, ...shown.map((line, i) => h("span", { class: "ln", "data-n": firstLine + i }, line || " ")));
+  if (lines.length > maxLines) code.append(h("span", { class: "ln", "data-n": "" }, "…"));
+  return h("pre", { class: "code" }, code);
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ================================================================ settings / key */
@@ -454,6 +505,7 @@ function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent).filter(Boolean);
   const view = $("#view");
   view.replaceChildren();
+  document.body.dataset.view = parts[0] === "r" && parts.length >= 3 ? parts[3] || "ask" : parts[0] === "pr" ? "pr" : "home";
   if (parts[0] === "r" && parts.length >= 3) return viewRepo(view, parts[1], parts[2], parts[3] || "ask");
   if (parts[0] === "pr" && parts.length >= 4) return viewReview(view, parts[1], parts[2], parts[3]);
   return viewHome(view);
@@ -465,15 +517,15 @@ const EXAMPLES = ["pallets/flask", "psf/requests", "tiangolo/fastapi", "osm-sear
 function viewHome(view) {
   document.title = "RepoScout";
   const input = h("input", { id: "linkInput", type: "text", inputmode: "url", autocomplete: "off", spellcheck: "false",
-    placeholder: "https://github.com/owner/repo  or a pull request link", "aria-label": "GitHub repository or pull request link" });
+    placeholder: matchMedia("(max-width: 560px)").matches ? "github.com/owner/repo" : "https://github.com/owner/repo  or a pull request link", "aria-label": "GitHub repository or pull request link" });
   const detect = h("div", { class: "detect", "aria-live": "polite" });
   const go = h("button", { class: "btn primary large", type: "submit" }, "Go");
   const update = () => {
     const link = parseLink(input.value); detect.replaceChildren();
     if (!input.value.trim()) { go.textContent = "Go"; return; }
     if (!link) { detect.append(h("span", { class: "pill warning" }, "Not a GitHub link yet")); go.textContent = "Go"; return; }
-    if (link.pull) { detect.append(h("span", { class: "pill accent" }, `Pull request #${link.pull}`), ` in ${link.owner}/${link.name}`); go.textContent = "Review"; }
-    else { detect.append(h("span", { class: "pill accent" }, "Repository"), ` ${link.owner}/${link.name}`); go.textContent = "Explore"; }
+    if (link.pull) { detect.append(h("span", { class: "pill accent" }, `Pull request #${link.pull}`), h("span", { class: "mono" }, `${link.owner}/${link.name}`)); go.textContent = "Review"; }
+    else { detect.append(h("span", { class: "pill accent" }, "Repository"), h("span", { class: "mono" }, `${link.owner}/${link.name}`)); go.textContent = "Explore"; }
   };
   input.addEventListener("input", update);
   const form = h("form", { class: "linkbox input-shell", onsubmit: (e) => { e.preventDefault(); submitLink(input.value); } },
@@ -483,23 +535,25 @@ function viewHome(view) {
     h("h1", {}, "Understand any GitHub repo in minutes."),
     h("p", { class: "lede" }, "Paste a public repository to ask questions about its code, or a pull request to get a careful review. Answers point to the exact lines on GitHub."),
     form, detect,
-    h("div", { class: "examples" }, "Try:", ...EXAMPLES.map((ex) => h("button", { class: "chip mono", type: "button", onclick: () => { input.value = `https://github.com/${ex}`; update(); input.focus(); } }, ex))),
-    h("div", { class: "how" },
-      h("div", {}, h("h3", {}, "Ask about the code"), h("p", {}, "“Where is authentication handled?” Get an answer with links to the lines it came from.")),
-      h("div", {}, h("h3", {}, "Review pull requests"), h("p", {}, "Fixed checks for secrets and unsafe code, plus an AI review that reads the code around the change.")),
-      h("div", {}, h("h3", {}, "Free to use"), h("p", {}, ["Bring your own free ", CONFIG.provider, " API key. It never leaves your browser except with your own requests."]))),
-    h("section", { class: "recent", "aria-labelledby": "recentTitle" }, h("h2", { id: "recentTitle" }, "Recently explored"), recentList)));
+    h("div", { class: "examples" }, h("span", { class: "label" }, "Try"), ...EXAMPLES.map((ex) => h("button", { class: "chip mono", type: "button", onclick: () => { input.value = `https://github.com/${ex}`; update(); input.focus(); } }, ex))),
+    h("div", { class: "features" },
+      feature(ICONS.chat, "Ask about the code", "“Where is authentication handled?” Get an answer with links to the lines it came from."),
+      feature(ICONS.review, "Review pull requests", "Fixed checks for secrets and unsafe code, plus an AI review that reads the code around the change."),
+      feature(ICONS.lock, "Free and private", ["Bring your own free ", CONFIG.provider, " API key. It never leaves your browser except with your own requests."])),
+    h("section", { class: "recent", "aria-labelledby": "recentTitle" }, h("div", { class: "recent-head" }, h("h2", { id: "recentTitle" }, "Recently explored")), recentList)));
   setTimeout(() => input.focus(), 0);
   api("/api/repos").then(({ repos }) => {
     recentList.replaceChildren();
     if (!repos.length) { recentList.append(h("li", { class: "empty-note" }, "Nothing yet. Be the first: paste a repository link above.")); return; }
     for (const r of repos) recentList.append(h("li", {}, h("a", { class: "repo-row", href: repoHash(r.owner, r.name) },
       h("span", { class: "name" }, r.full_name),
-      h("span", { class: "desc" }, r.description || (r.ready ? `${fmt(r.files_total)} files indexed` : r.stage)),
-      h("span", { class: "meta" }, r.language ? h("span", {}, r.language) : null, r.stars ? h("span", {}, `★ ${fmt(r.stars)}`) : null,
+      h("span", { class: "desc" }, r.description || (r.ready ? `${fmt(r.files_total)} files indexed` : r.status === "failed" ? "Indexing failed" : r.stage)),
+      h("span", { class: "meta" }, r.language ? h("span", {}, h("i", { class: "lang-dot" }), r.language) : null,
+        r.stars ? h("span", { "aria-label": `${fmt(r.stars)} stars` }, icon(ICONS.star, 13), fmt(r.stars)) : null,
         h("span", { class: "pill " + (r.ready ? "success" : r.status === "failed" ? "danger" : "info") }, r.ready ? "Ready" : r.status === "failed" ? "Failed" : "Indexing")))));
   }).catch(() => recentList.replaceChildren(h("li", { class: "empty-note" }, "Couldn't load the list.")));
 }
+const feature = (ic, title, text) => h("div", { class: "feature" }, h("span", { class: "ic" }, icon(ic, 16)), h("h3", {}, title), h("p", {}, text));
 async function submitLink(text) {
   const link = parseLink(text);
   if (!link) { toast("Paste a link like https://github.com/owner/repo", null, "error"); return; }
@@ -546,7 +600,7 @@ function showProgress(view, owner, name, record) {
     }
     const order = STEPS.map((s) => s[0]); const at = Math.max(0, order.indexOf(r.status));
     steps.replaceChildren(...STEPS.map(([key, label], i) => h("li", { class: i < at ? "done" : i === at ? "now" : "" },
-      h("span", { class: "mark" }, i < at ? "✓" : ""), i === at && key === "indexing" && r.files_total ? `${label} (${fmt(r.files_done)} of ${fmt(r.files_total)})` : i === at && key === "queued" && r.queue_position > 1 ? `${label} (number ${r.queue_position} in line)` : label)));
+      h("span", { class: "mark" }, i < at ? icon(ICONS.check, 11) : ""), i === at && key === "indexing" && r.files_total ? `${label} (${fmt(r.files_done)} of ${fmt(r.files_total)})` : i === at && key === "queued" && r.queue_position > 1 ? `${label} (number ${r.queue_position} in line)` : label)));
     if (r.status === "indexing" && r.files_total) { bar.classList.remove("indeterminate"); bar.firstChild.style.setProperty("--progress", r.files_done / r.files_total); }
     else bar.classList.add("indeterminate");
   };
@@ -563,18 +617,18 @@ function renderRepo(view, r, tab) {
   const commit = (r.commit_sha || "").slice(0, 7);
   const ghUrl = `https://github.com/${r.full_name}`;
   const tabLink = (key, label, ic) => h("a", { class: "tab", href: repoHash(r.owner, r.name, key === "ask" ? "" : key), "aria-current": tab === key ? "page" : null }, icon(ic), label);
-  const refresh = h("button", { class: "btn small", type: "button", onclick: async () => {
+  const refresh = h("button", { class: "btn small", type: "button", "aria-label": "Refresh index", title: "Refresh index", onclick: async () => {
     try { await api("/api/repos", { method: "POST", body: { url: r.full_name, refresh: true } }); toast("Refreshing the index in the background. You can keep asking meanwhile."); }
-    catch (e) { handleError(e); } } }, "Refresh index");
+    catch (e) { handleError(e); } } }, icon(ICONS.refresh, 14), h("span", { class: "btn-label" }, "Refresh index"));
   const side = h("aside", { class: "side" },
-    h("p", { class: "repo-name" }, h("a", { href: ghUrl, target: "_blank", rel: "noopener" }, r.full_name)),
+    h("h1", { class: "repo-title" }, h("a", { href: ghUrl, target: "_blank", rel: "noopener" }, r.full_name)),
     r.description ? h("p", { class: "desc" }, r.description) : null,
-    h("ul", { class: "facts" },
-      r.branch || commit ? h("li", {}, h("b", {}, "Code: "), `${r.branch || "default branch"}${commit ? " @ " + commit : ""}`) : null,
-      h("li", {}, h("b", {}, "Indexed: "), `${fmt(r.files_total)} files, ${fmt(r.chunks)} sections`),
-      r.language ? h("li", {}, h("b", {}, "Language: "), r.language) : null),
+    h("ul", { class: "facts", "aria-label": "About this index" },
+      r.branch || commit ? h("li", {}, icon(ICONS.branch, 14), h("span", {}, `${r.branch || "default branch"}${commit ? " @ " + commit : ""}`)) : null,
+      h("li", {}, icon(ICONS.file, 14), h("span", {}, `${fmt(r.files_total)} files, ${fmt(r.chunks)} sections`)),
+      r.language ? h("li", {}, icon(ICONS.code, 14), h("span", {}, r.language)) : null),
     h("nav", { class: "tabs", "aria-label": "Repository tools" }, tabLink("ask", "Ask", ICONS.chat), tabLink("search", "Find code", ICONS.search), tabLink("review", "Review a PR", ICONS.review)),
-    h("div", { class: "side-actions" }, refresh, h("a", { class: "btn small", href: ghUrl, target: "_blank", rel: "noopener" }, "GitHub ", icon(ICONS.ext, 14))));
+    h("div", { class: "side-actions" }, refresh, h("a", { class: "btn small", href: ghUrl, target: "_blank", rel: "noopener", "aria-label": "Open on GitHub", title: "Open on GitHub" }, icon(ICONS.ext, 14), h("span", { class: "btn-label" }, "GitHub"))));
   const content = h("section", { "aria-label": "Workspace" });
   const banner = r.status !== "ready" ? h("div", { class: "banner" }, icon(ICONS.info, 16), "Refreshing the index in the background. Answers use the previous version until it's done.") : r.error ? h("div", { class: "banner error" }, icon(ICONS.alert, 16), `Last refresh failed: ${r.error}`) : null;
   if (banner) content.append(banner);
@@ -591,28 +645,28 @@ function tabAsk(content, r) {
   let turns = store.get(chatKey) || [];
   const thread = h("div", { class: "thread", "aria-live": "polite" });
   const textarea = h("textarea", { rows: "1", placeholder: `Ask about ${r.name}…`, "aria-label": "Your question", maxlength: "2000" });
-  const sendBtn = h("button", { class: "btn primary", type: "submit", "aria-label": "Send" }, icon(ICONS.send, 16));
+  const sendBtn = h("button", { class: "btn primary icon", type: "submit", "aria-label": "Send" }, icon(ICONS.send, 16));
   const clearBtn = h("button", { class: "btn ghost small", type: "button", onclick: () => { turns = []; store.set(chatKey, turns); paint(); textarea.focus(); } }, "Clear chat");
-  const form = h("form", { onsubmit: (e) => { e.preventDefault(); send(textarea.value); } }, textarea, sendBtn);
+  const form = h("form", { class: "input-shell", onsubmit: (e) => { e.preventDefault(); send(textarea.value); } }, textarea, sendBtn);
   const grow = () => { textarea.style.height = "auto"; textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px"; };
   textarea.addEventListener("input", grow);
   textarea.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
   content.append(h("div", { class: "chat" }, thread,
-    h("div", { class: "composer" }, form, h("div", { class: "hint" }, h("span", {}, "Enter to send · Shift+Enter for a new line"), clearBtn))));
+    h("div", { class: "composer" }, form, h("div", { class: "hint" }, h("span", { class: "keys" }, h("kbd", { class: "kbd" }, "Enter"), " to send · ", h("kbd", { class: "kbd" }, "Shift"), " + ", h("kbd", { class: "kbd" }, "Enter"), " for a new line"), clearBtn))));
   function botBubble(turn) {
-    const body = h("div", { class: "body" });
+    const body = h("div", { class: "body" + (turn.pending ? " pending" : turn.error ? " failed" : "") });
     if (turn.pending) body.append(h("span", { class: "thinking", "aria-label": "Thinking" }, h("i"), h("i"), h("i")));
     else if (turn.error) body.append(h("div", { class: "banner error" }, icon(ICONS.alert, 16), h("span", { class: "spacer" }, turn.error),
       h("button", { class: "btn small", type: "button", onclick: () => { turns.pop(); paint(); send(turn.question); } }, "Try again")));
     else {
       body.append(renderAnswer(turn.answer, turn.sources));
-      if (turn.sources && turn.sources.length) body.append(h("div", { class: "sources" }, ...turn.sources.map((s) =>
-        h("a", { class: "src" + ((turn.cited || []).includes(s.ref) ? "" : " uncited"), href: s.url, target: "_blank", rel: "noopener", title: s.name ? `${s.kind} ${s.name}` : s.path },
-          h("span", { class: "n" }, s.ref), h("span", { class: "path" }, `${s.path}:${s.start_line}-${s.end_line}`)))));
+      if (turn.sources && turn.sources.length) body.append(h("div", { class: "sources" }, h("div", { class: "sources-label" }, "Sources"), h("div", { class: "sources-list" }, ...turn.sources.map((s) =>
+        h("a", { class: "src" + ((turn.cited || []).includes(s.ref) ? "" : " uncited"), href: s.url, target: "_blank", rel: "noopener", title: (s.name ? `${s.kind} ${s.name}` : s.path) + ((turn.cited || []).includes(s.ref) ? "" : " (not cited)") },
+          h("span", { class: "n" }, s.ref), h("span", { class: "path" }, `${s.path}:${s.start_line}-${s.end_line}`))))));
     }
     const foot = turn.pending || turn.error ? null : h("div", { class: "foot" },
       turn.model ? h("span", {}, turn.model) : null, turn.latency_ms ? h("span", {}, `${(turn.latency_ms / 1000).toFixed(1)}s`) : null,
-      h("button", { class: "btn ghost small", type: "button", onclick: (e) => { navigator.clipboard?.writeText(turn.answer).then(() => { e.target.textContent = "Copied"; }); } }, "Copy"));
+      copyButton(() => turn.answer));
     return h("div", { class: "msg-bot" }, body, foot);
   }
   function paint() {
@@ -620,7 +674,7 @@ function tabAsk(content, r) {
     if (!turns.length) {
       thread.append(h("div", { class: "chat-empty" }, h("h2", {}, `Ask anything about ${r.name}`),
         h("p", {}, "Answers come from the indexed code and link to the exact lines on GitHub."),
-        h("div", { class: "starters" }, ...STARTERS.map((q) => h("button", { class: "starter", type: "button", onclick: () => send(q) }, q)))));
+        h("div", { class: "starters" }, ...STARTERS.map((q) => h("button", { class: "starter", type: "button", onclick: () => send(q) }, icon(ICONS.chat, 15), h("span", {}, q))))));
       return;
     }
     for (const t of turns) thread.append(h("div", { class: "msg-user" }, t.question), botBubble(t));
@@ -652,18 +706,19 @@ function tabAsk(content, r) {
 /* ---------- find code ---------- */
 function tabSearch(content, r) {
   const input = h("input", { class: "input", type: "search", placeholder: "Function names, keywords, or a description", "aria-label": "Search the code" });
-  const results = h("div", { "aria-live": "polite" }, h("p", { class: "muted" }, "Search works without an API key: it matches both words and meaning."));
+  const results = h("div", { class: "results", "aria-live": "polite" });
   const run = async () => {
     const query = input.value.trim(); if (!query) return;
     results.replaceChildren(h("div", { class: "loading-center" }, "Searching…"));
     try {
       const { results: hits } = await api(`/api/repos/${r.owner}/${r.name}/search`, { method: "POST", body: { query } });
       results.replaceChildren(...(hits.length ? hits.map((x) => h("article", { class: "hit" },
-        h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener" }, `${x.path}:${x.start_line}-${x.end_line}`), h("span", {}, x.name ? `${x.kind} ${x.name}` : x.language)),
-        h("pre", {}, x.text.split("\n").slice(0, 14).join("\n") + (x.text.split("\n").length > 14 ? "\n…" : "")))) : [h("p", {}, "No matches. Try other words.")]));
+        h("header", {}, h("a", { href: x.url, target: "_blank", rel: "noopener" }, `${x.path}:${x.start_line}-${x.end_line}`), h("span", { class: "pill" }, x.name ? `${x.kind} ${x.name}` : x.language)),
+        codeBlock(x.text, x.start_line, 14))) : [h("p", {}, "No matches. Try other words.")]));
     } catch (err) { results.replaceChildren(); handleError(err, run); }
   };
-  content.append(h("form", { class: "searchbar", onsubmit: (e) => { e.preventDefault(); run(); } }, input, h("button", { class: "btn primary", type: "submit" }, "Search")), results);
+  content.append(h("form", { class: "searchbar", onsubmit: (e) => { e.preventDefault(); run(); } }, input, h("button", { class: "btn primary", type: "submit" }, "Search")),
+    h("p", { class: "search-hint" }, "Works without an API key. It matches both exact words and meaning."), results);
   setTimeout(() => input.focus(), 0);
 }
 
@@ -685,6 +740,8 @@ function tabReview(content, r) {
 
 /* ================================================================ review */
 const SEVERITIES = ["critical", "major", "minor", "nit"];
+const SEV_LABEL = { critical: "Critical", major: "Major", minor: "Minor", nit: "Nit" };
+const STATE_TONE = { open: "success", merged: "info", closed: "danger" };
 // Reviews spend the visitor's API quota, so they only start on the visitor's own click:
 // from the forms in this app, or the "Start review" button when a link was opened directly.
 let approvedReview = "";
@@ -696,10 +753,10 @@ async function viewReview(view, owner, name, number) {
   document.title = `Review #${number} · ${owner}/${name} · RepoScout`;
   const url = `https://github.com/${owner}/${name}/pull/${number}`;
   const head = h("div", { class: "review-head" },
-    h("div", { class: "crumbs" }, h("a", { href: repoHash(owner, name) }, `${owner}/${name}`), ` / pull request #${number}`),
+    h("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, h("a", { href: repoHash(owner, name) }, `${owner}/${name}`), h("span", { "aria-hidden": "true" }, "/"), h("span", {}, `Pull request #${number}`)),
     h("h1", {}, `Reviewing pull request #${number}`));
   const body = h("div", { "aria-live": "polite" });
-  view.replaceChildren(head, body);
+  view.replaceChildren(h("div", { class: "review" }, head, body));
   if (!settings.key) {
     body.append(h("div", { class: "card view-card" }, h("h2", { class: "card-title" }, "Add your API key to start"),
       h("p", { class: "card-text" }, `Reviews use your own free ${CONFIG.provider} key. It stays in your browser.`),
@@ -739,19 +796,21 @@ async function viewReview(view, owner, name, number) {
 function paintReview(head, body, data, rerun) {
   const pr = data.pull;
   head.replaceChildren(
-    h("div", { class: "crumbs" }, h("a", { href: repoHash(...pr.repo.split("/")) }, pr.repo), ` / pull request #${pr.number}`),
+    h("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, h("a", { href: repoHash(...pr.repo.split("/")) }, pr.repo), h("span", { "aria-hidden": "true" }, "/"), h("span", {}, `Pull request #${pr.number}`)),
     h("h1", {}, pr.title || `Pull request #${pr.number}`),
     h("div", { class: "review-meta" },
-      pr.author ? h("span", {}, `by ${pr.author}`) : null, pr.state ? h("span", {}, pr.state) : null,
-      h("span", {}, `${fmt(pr.changed_files)} files`), h("span", {}, h("span", { class: "plus" }, `+${fmt(pr.additions)}`), " ", h("span", { class: "minus" }, `−${fmt(pr.deletions)}`)),
-      h("a", { href: pr.url, target: "_blank", rel: "noopener" }, "Open on GitHub ", icon(ICONS.ext, 13))));
+      pr.state ? h("span", { class: "pill " + (STATE_TONE[pr.state] || "") }, pr.state) : null, pr.author ? h("span", {}, `by ${pr.author}`) : null,
+      h("span", {}, `${fmt(pr.changed_files)} file${pr.changed_files === 1 ? "" : "s"}`),
+      h("span", { class: "diffstat" }, h("span", { class: "plus" }, `+${fmt(pr.additions)}`), " ", h("span", { class: "minus" }, `−${fmt(pr.deletions)}`)),
+      h("a", { href: pr.url, target: "_blank", rel: "noopener" }, "Open on GitHub", icon(ICONS.ext, 13))));
   const counts = data.counts || {};
   const total = SEVERITIES.reduce((a, s) => a + (counts[s] || 0), 0);
   const active = new Set(SEVERITIES.filter((s) => s !== "nit" || total === (counts.nit || 0)));
   const list = h("div");
   const filters = h("div", { class: "filters", role: "group", "aria-label": "Filter by severity" });
   const paintFilters = () => filters.replaceChildren(...SEVERITIES.filter((s) => counts[s]).map((s) =>
-    h("button", { class: `chip sev sev-${s}`, type: "button", "aria-pressed": String(active.has(s)), onclick: () => { active.has(s) ? active.delete(s) : active.add(s); paintFilters(); paintList(); } }, `${counts[s]} ${s}`)));
+    h("button", { class: `chip sev sev-${s}`, type: "button", "aria-pressed": String(active.has(s)), onclick: () => { active.has(s) ? active.delete(s) : active.add(s); paintFilters(); paintList(); } },
+      h("span", { class: "count" }, counts[s]), SEV_LABEL[s])));
   const paintList = () => {
     list.replaceChildren();
     const shown = data.findings.filter((f) => active.has(f.severity));
@@ -759,27 +818,38 @@ function paintReview(head, body, data, rerun) {
     for (const f of shown) (byFile[f.path] ||= []).push(f);
     const files = data.files_reviewed.filter((p) => byFile[p] || data.file_summaries[p]);
     for (const path of files) {
-      const group = h("section", { class: "file-group" }, h("h3", {}, path), data.file_summaries[path] ? h("p", { class: "summary" }, data.file_summaries[path]) : null);
-      for (const f of (byFile[path] || []).sort((a, b) => a.line - b.line)) group.append(h("article", { class: `finding ${f.severity}` },
-        h("div", { class: "top" }, h("span", { class: `pill ${f.severity}` }, f.severity), h("span", { class: "title" }, f.title),
-          h("a", { class: "where", href: f.url, target: "_blank", rel: "noopener" }, `line ${f.line}`)),
-        h("p", {}, f.message), f.suggestion ? h("pre", {}, f.suggestion) : null,
-        h("div", { class: "by" }, f.source === "llm" ? `AI review · ${f.category}` : `Fixed check (${f.source.replace("rule:", "")}) · ${f.category}`)));
-      list.append(group);
+      const found = (byFile[path] || []).sort((a, b) => a.line - b.line);
+      const findings = h("div", { class: "findings" });
+      for (const f of found) {
+        const message = h("p"); message.innerHTML = inline(esc(f.message));
+        findings.append(h("article", { class: `finding ${f.severity}` },
+          h("div", { class: "top" }, h("span", { class: `pill ${f.severity}` }, SEV_LABEL[f.severity]), h("span", { class: "title" }, f.title),
+            h("a", { class: "where", href: f.url, target: "_blank", rel: "noopener" }, `line ${f.line}`)),
+          message, f.suggestion ? [h("div", { class: "fix-label" }, "Suggested change"), h("pre", {}, f.suggestion)] : null,
+          h("div", { class: "by" }, f.source === "llm" ? [icon(ICONS.bot, 13), `AI review · ${f.category}`] : [icon(ICONS.shield, 13), `Fixed check (${f.source.replace("rule:", "")}) · ${f.category}`])));
+      }
+      list.append(h("section", { class: "file-group" },
+        h("div", { class: "file-head" }, icon(ICONS.file, 15), h("h3", {}, path), found.length ? h("span", { class: "pill" }, found.length) : null),
+        data.file_summaries[path] ? h("p", { class: "summary" }, data.file_summaries[path]) : null, found.length ? findings : null));
     }
     if (!shown.length && total) list.append(h("p", { class: "muted" }, "All findings are hidden by the filters above."));
   };
-  const copyBtn = h("button", { class: "btn small", type: "button", onclick: () => navigator.clipboard?.writeText(data.markdown).then(() => toast("Review copied as Markdown. Paste it into a GitHub comment.")) }, "Copy as Markdown");
-  const rerunBtn = h("button", { class: "btn small", type: "button", onclick: rerun }, "Run again");
-  const verdict = total
-    ? h("div", { class: "verdict" }, h("span", { class: "big" }, `${total} thing${total === 1 ? "" : "s"} to look at`), filters, h("span", { class: "spacer" }), copyBtn, rerunBtn)
-    : h("div", { class: "verdict" }, h("span", { class: "big" }, "No problems found"), h("span", { class: "muted" }, `in ${fmt(data.files_reviewed.length)} reviewed file(s)`), h("span", { class: "spacer" }), copyBtn, rerunBtn);
+  const copyBtn = h("button", { class: "btn small", type: "button", onclick: () => navigator.clipboard?.writeText(data.markdown).then(() => toast("Review copied as Markdown. Paste it into a GitHub comment.", null, "success")) }, icon(ICONS.copy, 14), "Copy as Markdown");
+  const rerunBtn = h("button", { class: "btn small", type: "button", onclick: rerun }, icon(ICONS.refresh, 14), "Run again");
+  const reviewed = `${fmt(data.files_reviewed.length)} file${data.files_reviewed.length === 1 ? "" : "s"} reviewed`;
+  const verdict = h("div", { class: "card verdict" },
+    h("div", { class: "verdict-top" },
+      total ? null : h("span", { class: "ok-icon" }, icon(ICONS.check, 16)),
+      h("h2", { class: "big" }, total ? `${total} thing${total === 1 ? "" : "s"} to look at` : "No problems found"),
+      h("span", { class: "note" }, reviewed),
+      h("div", { class: "verdict-actions" }, copyBtn, rerunBtn)),
+    total ? filters : null);
   const notes = [];
   if (!data.used_repo_context) notes.push(h("div", { class: "banner" }, icon(ICONS.info, 16), h("span", {}, "Tip: ", h("a", { href: repoHash(...pr.repo.split("/")) }, `index ${pr.repo}`), " first, and reviews will also read related code from the project.")));
   const skipped = Object.entries(data.files_skipped || {});
-  if (skipped.length) notes.push(h("p", { class: "note" }, `Skipped: ${skipped.map(([p, why]) => `${p} (${why})`).join(", ")}`));
+  if (skipped.length) notes.push(h("p", { class: "note" }, `Not reviewed: ${skipped.map(([p, why]) => `${p} (${why})`).join(", ")}`));
   if (data.stats && data.stats.llm_errors) notes.push(h("div", { class: "banner error" }, icon(ICONS.alert, 16), `The AI couldn't review ${data.stats.llm_errors} file(s), usually because of rate limits. Fixed checks still ran. Try "Run again" in a minute.`));
-  body.replaceChildren(verdict, ...notes, list);
+  body.replaceChildren(verdict, notes.length ? h("div", { class: "notes" }, ...notes) : null, list);
   paintFilters(); paintList();
 }
 

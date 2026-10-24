@@ -2,80 +2,79 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RepoScout</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F6B57'/%3E%3Ccircle cx='14' cy='14' r='6.5' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M19 19l6 6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/ui.css?v={{asset_version}}">
 <style>
-  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
-  h1 span { color: var(--accent); }
-  #stats { color: var(--text-3); font-size: 13px; }
-  nav { display: flex; gap: 4px; margin: 24px 0 16px; border-bottom: 1px solid var(--border); }
-  nav button { background: none; border: 0; padding: 10px 14px; font: inherit; color: var(--text-3);
-               cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  nav button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  section { display: none; }
-  section.active { display: block; }
-  textarea.input { min-height: 96px; }
+  main { max-width: 880px; margin: 0 auto; padding: var(--s-8) max(var(--s-4), env(safe-area-inset-left)) var(--s-16); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-size: var(--text-base); font-weight: 650; letter-spacing: -0.01em; }
+  #stats { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav { display: flex; gap: var(--s-1); margin: var(--s-6) 0 var(--s-4); border-bottom: 1px solid var(--border); }
+  nav button { height: 40px; margin-bottom: -1px; padding: 0 var(--s-3); border: 0; border-bottom: 2px solid transparent; background: none;
+    color: var(--text-3); font-size: var(--text-md); font-weight: 500; cursor: pointer; transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease; }
+  nav button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--text); font-weight: 600; }
+  @media (hover: hover) and (pointer: fine) { nav button:hover { color: var(--text); } }
+  section[role="tabpanel"]:not(.active) { display: none; }
+  textarea.input { display: block; min-height: 104px; }
   #diff { min-height: 240px; }
-  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-  select.input { width: auto; height: 36px; }
-  .hint { color: var(--text-3); font-size: 13px; }
-  .card { margin-top: 16px; }
-  .answer { white-space: pre-wrap; }
-  .sources { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; }
-  .sources li { padding: 4px 0; border-top: 1px dashed var(--border); font-family: ui-monospace, Menlo, monospace; }
-  .sources li.cited::before { content: "● "; color: var(--accent); }
-  .finding { border-left: 3px solid var(--nit); padding: 8px 12px; margin: 12px 0; background: var(--surface-2); border-radius: 0 8px 8px 0; }
-  .finding.critical { border-color: var(--critical); } .finding.major { border-color: var(--major); }
-  .finding.minor { border-color: var(--minor); }
-  .finding .meta { font-size: 12px; color: var(--text-3); font-family: ui-monospace, Menlo, monospace; }
-  .finding .title { font-weight: 600; margin: 2px 0; }
-  pre { background: var(--surface-2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 13px; margin: 8px 0 0; }
-  .finding pre { background: var(--surface); }
-  .banner { margin-top: 16px; }
-  .result-hit { margin-top: 14px; }
-  .result-hit .meta { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text-3); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-top: var(--s-3); }
+  .row label { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--text-sm); color: var(--text-2); }
+  select.input { width: auto; height: 36px; font-size: var(--text-md); }
+  .hint { font-size: var(--text-xs); color: var(--text-3); }
+  .out { margin-top: var(--s-6); }
+  .out > * + * { margin-top: var(--s-4); }
+  .answer { white-space: pre-wrap; line-height: 1.65; }
+  .foot { margin-top: var(--s-3); font-size: var(--text-xs); color: var(--text-3); }
+  .headline { font-size: var(--text-lg); font-weight: 650; }
+  .summaries { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--text-sm); color: var(--text-2); }
+  .summaries b { font: 600 var(--text-xs) var(--mono); color: var(--text); }
+  .findings { display: grid; gap: var(--s-3); }
+  .stats-skeleton { width: 220px; height: 22px; border-radius: var(--r-full); }
+  .empty { padding: var(--s-6); text-align: center; color: var(--text-3); }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Repo<span>Scout</span></h1>
-    <div id="stats">loading index…</div>
+    <span class="brand">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="14" cy="14" r="6.5" fill="none" stroke="var(--accent-fg)" stroke-width="3"/><path d="M19 19l6 6" stroke="var(--accent-fg)" stroke-width="3" stroke-linecap="round"/></svg>
+      RepoScout
+    </span>
+    <div id="stats" aria-live="polite"><span class="skeleton stats-skeleton"></span></div>
   </header>
 
-  <nav>
-    <button class="active" data-tab="ask">Ask</button>
-    <button data-tab="review">Review a diff</button>
-    <button data-tab="search">Search</button>
+  <nav role="tablist" aria-label="Tools">
+    <button role="tab" id="tab-ask" aria-controls="ask" aria-selected="true" data-tab="ask">Ask</button>
+    <button role="tab" id="tab-review" aria-controls="review" aria-selected="false" tabindex="-1" data-tab="review">Review a diff</button>
+    <button role="tab" id="tab-search" aria-controls="search" aria-selected="false" tabindex="-1" data-tab="search">Search</button>
   </nav>
 
-  <section id="ask" class="active">
-    <textarea class="input mono" id="question" placeholder="Ask about the codebase, e.g. “How are webhook signatures verified?”"></textarea>
+  <section id="ask" role="tabpanel" aria-labelledby="tab-ask" class="active">
+    <textarea class="input" id="question" aria-label="Your question" placeholder="Ask about the codebase, e.g. “How are webhook signatures verified?”"></textarea>
     <div class="row"><button class="btn primary" id="ask-btn">Ask</button><span class="hint"><kbd class="kbd">Ctrl/⌘</kbd> + <kbd class="kbd">Enter</kbd></span></div>
-    <div id="ask-out"></div>
+    <div class="out" id="ask-out" aria-live="polite"></div>
   </section>
 
-  <section id="review">
-    <textarea class="input mono" id="diff" placeholder="Paste a unified diff (output of git diff)…"></textarea>
+  <section id="review" role="tabpanel" aria-labelledby="tab-review">
+    <textarea class="input mono" id="diff" aria-label="Unified diff" placeholder="Paste a unified diff (output of git diff)…"></textarea>
     <div class="row">
       <button class="btn primary" id="review-btn">Review</button>
-      <label class="hint">Minimum severity
-        <select class="input" id="min-sev"><option>nit</option><option>minor</option><option>major</option><option>critical</option></select>
+      <label>Minimum severity
+        <select class="input" id="min-sev"><option value="nit">Nit</option><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select>
       </label>
     </div>
-    <div id="review-out"></div>
+    <div class="out" id="review-out" aria-live="polite"></div>
   </section>
 
-  <section id="search">
-    <textarea class="input mono" id="query" placeholder="Keywords or a description of the code you are looking for"></textarea>
-    <div class="row"><button class="btn primary" id="search-btn">Search</button></div>
-    <div id="search-out"></div>
+  <section id="search" role="tabpanel" aria-labelledby="tab-search">
+    <textarea class="input" id="query" aria-label="Search the code" placeholder="Keywords or a description of the code you are looking for"></textarea>
+    <div class="row"><button class="btn primary" id="search-btn">Search</button><span class="hint"><kbd class="kbd">Ctrl/⌘</kbd> + <kbd class="kbd">Enter</kbd></span></div>
+    <div class="out" id="search-out" aria-live="polite"></div>
   </section>
 </main>
 
@@ -99,16 +98,33 @@ async function withButton(btn, fn) {
   btn.setAttribute("aria-busy", "true");
   try { await fn(); } finally { btn.removeAttribute("aria-busy"); }
 }
+function codeBlock(text, firstLine, maxLines) {
+  const lines = text.split("\n");
+  const code = el("code");
+  lines.slice(0, maxLines).forEach((line, i) => { const ln = el("span", "ln", line || " "); ln.dataset.n = firstLine + i; code.append(ln); });
+  if (lines.length > maxLines) { const more = el("span", "ln", "…"); more.dataset.n = ""; code.append(more); }
+  const pre = el("pre", "code"); pre.append(code); return pre;
+}
+const SEV_LABEL = { critical: "Critical", major: "Major", minor: "Minor", nit: "Nit" };
 
-document.querySelectorAll("nav button").forEach((btn) => btn.addEventListener("click", () => {
-  document.querySelectorAll("nav button, section").forEach((n) => n.classList.remove("active"));
-  btn.classList.add("active"); $(btn.dataset.tab).classList.add("active");
-}));
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function selectTab(btn) {
+  tabs.forEach((t) => { const on = t === btn; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; $(t.dataset.tab).classList.toggle("active", on); });
+  $(btn.dataset.tab).querySelector("textarea").focus();
+}
+tabs.forEach((btn, i) => {
+  btn.addEventListener("click", () => selectTab(btn));
+  btn.addEventListener("keydown", (e) => {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (step) { const next = tabs[(i + step + tabs.length) % tabs.length]; next.focus(); selectTab(next); }
+  });
+});
 
 fetch("/stats").then((r) => r.json()).then((s) => {
   const i = s.index || {};
-  $("stats").textContent = `${i.files || 0} files · ${i.chunks || 0} chunks · ${s.llm || "no LLM"}`;
-}).catch(() => { $("stats").textContent = "stats unavailable"; });
+  $("stats").replaceChildren(el("span", "pill", `${i.files || 0} files`), el("span", "pill", `${i.chunks || 0} chunks`),
+    el("span", s.llm ? "pill accent" : "pill warning", s.llm || "no LLM"));
+}).catch(() => { $("stats").replaceChildren(el("span", "pill warning", "stats unavailable")); });
 
 $("ask-btn").addEventListener("click", () => withButton($("ask-btn"), async () => {
   const out = $("ask-out");
@@ -117,15 +133,18 @@ $("ask-btn").addEventListener("click", () => withButton($("ask-btn"), async () =
     const card = el("div", "card");
     card.append(el("div", "answer", data.answer));
     if (data.sources.length) {
-      const list = el("ul", "sources");
+      const box = el("div", "sources");
+      const list = el("div", "sources-list");
       data.sources.forEach((s) => {
-        const li = el("li", data.cited.includes(s.ref) ? "cited" : "",
-          `[${s.ref}] ${s.path}:${s.start_line}-${s.end_line}${s.name ? "  " + s.name : ""}`);
-        list.append(li);
+        const chip = el("span", "src" + (data.cited.includes(s.ref) ? "" : " uncited"));
+        chip.title = s.name || s.path;
+        chip.append(el("span", "n", String(s.ref)), el("span", "path", `${s.path}:${s.start_line}-${s.end_line}`));
+        list.append(chip);
       });
-      card.append(list);
+      box.append(el("div", "sources-label", "Sources"), list);
+      card.append(box);
     }
-    card.append(el("div", "hint", `${data.latency_ms} ms`));
+    card.append(el("div", "foot", `${(data.latency_ms / 1000).toFixed(1)}s`));
     out.replaceChildren(card);
   } catch (err) { showError(out, err); }
 }));
@@ -134,20 +153,26 @@ $("review-btn").addEventListener("click", () => withButton($("review-btn"), asyn
   const out = $("review-out");
   try {
     const data = await post("/review", { diff: $("diff").value, min_severity: $("min-sev").value });
-    const card = el("div", "card");
-    card.append(el("div", "", data.headline));
-    Object.entries(data.file_summaries || {}).forEach(([path, summary]) =>
-      card.append(el("div", "hint", `${path}: ${summary}`)));
+    const summary = el("div", "card");
+    summary.append(el("div", "headline", data.headline));
+    const files = Object.entries(data.file_summaries || {});
+    if (files.length) {
+      const list = el("ul", "summaries");
+      files.forEach(([path, text]) => { const li = el("li"); li.append(el("b", "", path), " ", text); list.append(li); });
+      summary.append(list);
+    }
+    summary.append(el("div", "foot", `${(data.stats.latency_ms / 1000).toFixed(1)}s · ${data.stats.llm_calls} LLM call(s)`));
+    const findings = el("div", "findings");
     data.findings.forEach((f) => {
-      const box = el("div", `finding ${f.severity}`);
-      box.append(el("div", "meta", `${f.severity} · ${f.category} · ${f.path}:${f.line} · ${f.source}`));
-      box.append(el("div", "title", f.title));
-      box.append(el("div", "", f.message));
-      if (f.suggestion) box.append(el("pre", "", f.suggestion));
-      card.append(box);
+      const box = el("article", `finding ${f.severity}`);
+      const top = el("div", "top");
+      top.append(el("span", `pill ${f.severity}`, SEV_LABEL[f.severity] || f.severity), el("span", "title", f.title), el("span", "where", `${f.path}:${f.line}`));
+      box.append(top, el("p", "", f.message));
+      if (f.suggestion) box.append(el("div", "fix-label", "Suggested change"), el("pre", "", f.suggestion));
+      box.append(el("div", "by", f.source === "llm" ? `AI review · ${f.category}` : `Fixed check (${f.source.replace("rule:", "")}) · ${f.category}`));
+      findings.append(box);
     });
-    card.append(el("div", "hint", `${data.stats.latency_ms} ms · ${data.stats.llm_calls} LLM call(s)`));
-    out.replaceChildren(card);
+    out.replaceChildren(summary, ...(data.findings.length ? [findings] : []));
   } catch (err) { showError(out, err); }
 }));
 
@@ -155,15 +180,15 @@ $("search-btn").addEventListener("click", () => withButton($("search-btn"), asyn
   const out = $("search-out");
   try {
     const data = await post("/search", { query: $("query").value, k: 8 });
-    const card = el("div", "card");
-    if (!data.results.length) card.append(el("div", "hint", "No matches."));
-    data.results.forEach((r) => {
-      const hit = el("div", "result-hit");
-      hit.append(el("div", "meta", `${r.path}:${r.start_line}-${r.end_line}${r.name ? "  " + r.name : ""}`));
-      hit.append(el("pre", "", r.text.split("\n").slice(0, 14).join("\n")));
-      card.append(hit);
-    });
-    out.replaceChildren(card);
+    if (!data.results.length) { out.replaceChildren(el("div", "card empty", "No matches. Try other words.")); return; }
+    out.replaceChildren(...data.results.map((r) => {
+      const hit = el("article", "hit");
+      const head = el("header");
+      head.append(el("span", "mono", `${r.path}:${r.start_line}-${r.end_line}`));
+      if (r.name) head.append(el("span", "pill", r.name));
+      hit.append(head, codeBlock(r.text, r.start_line, 14));
+      return hit;
+    }));
   } catch (err) { showError(out, err); }
 }));
 
