@@ -321,6 +321,8 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 .hit { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
 .hit header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .hit header a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 var(--t-sm) var(--mono); color: var(--text); }
+.input.find { margin-top: var(--s-5); }
+.hit-skel { display: grid; gap: 8px; padding: 14px; }
 .hit pre { padding: 10px 0; background: var(--code); font: var(--t-sm)/1.65 var(--mono); overflow-x: auto; }
 .ln { display: block; padding-right: 14px; white-space: pre; }
 .ln::before { content: attr(data-n); display: inline-block; width: 48px; padding-right: 14px; color: var(--text-3); text-align: right; user-select: none; }
