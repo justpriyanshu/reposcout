@@ -357,6 +357,10 @@ KEY = {"X-LLM-Key": "gsk_good"}
 def test_full_flow(api):
     client, ws, groq, _ = api
     assert "RepoScout" in client.get("/").text
+    page = client.get("/").text
+    assert "/ui.css?v=" in page and "{{asset_version}}" not in page
+    css = client.get("/ui.css")
+    assert css.headers["content-type"].startswith("text/css") and "--accent" in css.text
     assert client.get("/api/config").json()["provider"] == "Groq"
 
     resp = client.post("/api/repos", json={"url": "https://github.com/Octo/Shop"})

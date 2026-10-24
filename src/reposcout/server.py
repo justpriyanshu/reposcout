@@ -6,14 +6,13 @@ import json
 import logging
 import time
 from collections import OrderedDict, deque
-from importlib import resources
 from threading import Lock
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import __version__
+from . import __version__, static_files
 from .config import Settings
 from .errors import IndexMismatchError, ProviderError, RepoScoutError
 from .github import GitHubClient, PullRequestRef, verify_signature
@@ -124,7 +123,11 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def ui() -> str:
-        return resources.files("reposcout").joinpath("static/index.html").read_text(encoding="utf-8")
+        return static_files.page("index.html")
+
+    @app.get("/ui.css", include_in_schema=False)
+    def ui_css():
+        return static_files.stylesheet()
 
     @app.get("/health")
     def health() -> dict:

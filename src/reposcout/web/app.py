@@ -11,7 +11,6 @@ import ipaddress
 import logging
 import re
 import time
-from importlib import resources
 from threading import Lock
 
 import httpx
@@ -19,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from .. import __version__
+from .. import __version__, static_files
 from ..assistant import RepoAssistant
 from ..embeddings import Embedder
 from ..errors import ProviderError, RepoScoutError
@@ -303,7 +302,11 @@ def create_public_app(
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def page() -> str:
-        return resources.files("reposcout").joinpath("static/app.html").read_text(encoding="utf-8")
+        return static_files.page("app.html")
+
+    @app.get("/ui.css", include_in_schema=False)
+    def ui_css():
+        return static_files.stylesheet()
 
     # Async so they answer even when every worker thread is busy.
     @app.get("/api/health")

@@ -156,6 +156,10 @@ def test_health_stats_and_ui(app_parts):
     stats = client.get("/stats").json()
     assert stats["index"]["files"] == 4 and stats["github_enabled"]
     assert "RepoScout" in client.get("/").text
+    page = client.get("/").text
+    assert "/ui.css?v=" in page and "{{asset_version}}" not in page
+    css = client.get("/ui.css")
+    assert css.headers["content-type"].startswith("text/css") and "--accent" in css.text
     assert "GET /health" in client.get("/stats").json()["requests"]
 
 
