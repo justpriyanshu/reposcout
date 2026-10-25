@@ -249,3 +249,5 @@ Docker: `docker compose up -d`, then `docker compose exec ollama ollama pull nom
 ## License
 
 MIT
+
+Contributors : PRIYANSHU RANJAN & ADITYA GOYAL
