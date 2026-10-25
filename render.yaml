@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: reposcout
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: >-
+      sh -c "git clone --depth 1 $TARGET_REPO_URL /repo &&
+      reposcout index &&
+      reposcout serve --host 0.0.0.0 --port 8000"
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: REPOSCOUT_REPO_PATH
+        value: /repo
+      - key: TARGET_REPO_URL
+        sync: false
+      - key: REPOSCOUT_EMBED_PROVIDER
+        value: hash
+      - key: REPOSCOUT_LLM_PROVIDER
+        value: openai
+      - key: REPOSCOUT_OPENAI_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: REPOSCOUT_LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: REPOSCOUT_OPENAI_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: REPOSCOUT_WEBHOOK_SECRET
+        generateValue: true
