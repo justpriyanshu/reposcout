@@ -9,10 +9,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
-ENV REPOSCOUT_REPO_PATH=/repo
 EXPOSE 8000
 
-# Shell form: runs through /bin/sh, so && and $VARS work
-CMD git clone --depth 1 "$TARGET_REPO_URL" /repo \
-    && reposcout index \
-    && reposcout serve --host 0.0.0.0 --port "${PORT:-8000}"
+# Public bring-your-own-key app
+CMD reposcout serve-public --host 0.0.0.0 --port "${PORT:-8000}"
