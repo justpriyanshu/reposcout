@@ -169,9 +169,37 @@ def cmd_review_pr(args) -> int:
     )
     _output_review(result, args.format)
     if args.post:
-        review = client.post_review(ref, pr["head"]["sha"], result)
-        print(f"\nPosted review: {review.get('html_url', ref)}", file=sys.stderr)
+        if not args.yes and not sys.stdin.isatty():
+            print(
+                "\nNot posted: posting needs confirmation. Run it in a terminal, or add --yes "
+                "(for example in CI on your own repository).",
+                file=sys.stderr,
+            )
+            return 2  # fail, so a CI run without --yes shows that nothing was posted
+        if args.yes or _confirm_post(client, ref, result):
+            review = client.post_review(ref, pr["head"]["sha"], result)
+            print(f"\nPosted review: {review.get('html_url', ref)}", file=sys.stderr)
+        else:
+            print("Not posted.", file=sys.stderr)
     return _exit_code(result, args.fail_on)
+
+
+def _confirm_post(client, ref, result) -> bool:
+    """Ask before writing to GitHub: the review appears on someone's pull request under
+    your account."""
+    from .github import MAX_INLINE_COMMENTS
+
+    who = client.whoami()
+    inline = min(len(result.findings), MAX_INLINE_COMMENTS)
+    question = (
+        f"\nPost this review on {ref} as {'@' + who if who else 'the GITHUB_TOKEN account'} "
+        f"(1 review, {inline} inline comment{'s' if inline != 1 else ''})? [y/N] "
+    )
+    try:
+        answer = input(question)
+    except EOFError:
+        answer = ""
+    return answer.strip().lower() in ("y", "yes")
 
 
 def cmd_serve(args) -> int:
@@ -324,7 +352,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("review-pr", parents=[common, review_opts], help="review a GitHub pull request")
     p.add_argument("pr", help="owner/repo#123 or a pull request URL")
-    p.add_argument("--post", action="store_true", help="post the review as PR comments")
+    p.add_argument(
+        "--post", action="store_true", help="post the review as PR comments (asks for confirmation first)"
+    )
+    p.add_argument("-y", "--yes", action="store_true", help="with --post: post without asking (CI)")
     p.set_defaults(func=cmd_review_pr)
 
     p = sub.add_parser("serve", parents=[common], help="run the web UI, API and GitHub webhook")

@@ -116,3 +116,71 @@ def test_cli_reads_env_file_from_current_folder(sample_repo, monkeypatch, capsys
     (sample_repo / ".env").write_text("REPOSCOUT_EMBED_PROVIDER=hash\n")
     assert main(["index"]) == 0
     assert "hash-1024" in capsys.readouterr().err
+
+
+class FakePRClient:
+    """Stands in for GitHubClient in `review-pr`; records what would be posted."""
+
+    instances: list = []
+
+    def __init__(self, token, api_url):
+        self.posted = []
+        FakePRClient.instances.append(self)
+
+    def get_pull_request(self, ref):
+        return {"title": "Run commands", "body": "", "head": {"sha": "abc123", "repo": {"full_name": "o/r"}}}
+
+    def get_pull_request_diff(self, ref):
+        return "--- a/app.py\n+++ b/app.py\n@@ -1,0 +1,1 @@\n+subprocess.run(cmd, shell=True)\n"
+
+    def source_loader(self, pr):
+        return None
+
+    def whoami(self):
+        return "octocat"
+
+    def post_review(self, ref, sha, result):
+        self.posted.append((str(ref), sha))
+        return {"html_url": "https://github.com/o/r/pull/1#review"}
+
+
+@pytest.fixture
+def fake_github(monkeypatch):
+    import reposcout.github as github
+
+    FakePRClient.instances = []
+    monkeypatch.setattr(github, "GitHubClient", FakePRClient)
+    return FakePRClient
+
+
+class Stdin:
+    def __init__(self, tty: bool):
+        self.tty = tty
+
+    def isatty(self):
+        return self.tty
+
+
+def review_pr(sample_repo, *extra):
+    return main(["review-pr", "o/r#1", "--no-llm", "--repo", str(sample_repo), *HASH, "--post", *extra])
+
+
+def test_posting_needs_confirmation_without_a_terminal(sample_repo, fake_github, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", Stdin(tty=False))
+    assert review_pr(sample_repo) == 2
+    assert fake_github.instances[0].posted == []
+    assert "--yes" in capsys.readouterr().err
+    assert review_pr(sample_repo, "--yes") == 0
+    assert fake_github.instances[1].posted == [("o/r#1", "abc123")]
+
+
+def test_posting_asks_and_respects_the_answer(sample_repo, fake_github, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", Stdin(tty=True))
+    asked = []
+    answers = iter(["n", "y"])
+    monkeypatch.setattr("builtins.input", lambda prompt: asked.append(prompt) or next(answers))
+    assert review_pr(sample_repo) == 0
+    assert fake_github.instances[0].posted == [] and "Not posted." in capsys.readouterr().err
+    assert review_pr(sample_repo) == 0
+    assert fake_github.instances[1].posted == [("o/r#1", "abc123")]
+    assert "o/r#1 as @octocat (1 review, 1 inline comment)" in asked[0]

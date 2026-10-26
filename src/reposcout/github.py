@@ -127,6 +127,16 @@ class GitHubClient:
             raise GitHubError(f"Could not fetch diff for {pr}: {resp.status_code} {resp.text[:300]}")
         return resp.text
 
+    def whoami(self) -> str | None:
+        """The login the token posts as, or None if GitHub won't say (e.g. the Actions token)."""
+        try:
+            resp = self._request("GET", "/user")
+        except GitHubError:
+            return None
+        if resp.status_code >= 400:
+            return None
+        return resp.json().get("login") or None
+
     def post_review(self, pr: PullRequestRef, commit_id: str, result: ReviewResult) -> dict:
         """Post one review with inline comments. Falls back to a summary-only review if
         GitHub rejects any comment position (HTTP 422)."""

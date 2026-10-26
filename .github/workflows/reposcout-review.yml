@@ -55,4 +55,5 @@ jobs:
             echo "No REPOSCOUT_OPENAI_API_KEY secret: running the rules-only review."
             MODE="--no-llm"
           fi
-          reposcout review-pr "$PR_REF" --embed-provider hash --min-severity minor --post $MODE
+          # --yes: there's nobody to confirm in CI; this workflow only runs on this repository.
+          reposcout review-pr "$PR_REF" --embed-provider hash --min-severity minor --post --yes $MODE

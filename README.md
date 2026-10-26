@@ -111,7 +111,7 @@ Free-tier limits and model names change often; check each provider's current one
 | `reposcout ask "question" [--no-llm] [--json]` | Answer a question with cited sources. |
 | `reposcout search "query" [-k 8]` | Hybrid code search. |
 | `reposcout review [--git BASE \| --staged \| --diff FILE]` | Review local changes. Defaults to uncommitted changes vs `HEAD`. |
-| `reposcout review-pr owner/repo#12 [--post]` | Review a GitHub PR; `--post` publishes it as PR comments. |
+| `reposcout review-pr owner/repo#12 [--post [--yes]]` | Review a GitHub PR; `--post` publishes it as PR comments after asking you to confirm (`--yes` skips the question, for CI). |
 | `reposcout serve [--host --port]` | Web UI, JSON API and GitHub webhook receiver. |
 | `reposcout serve-public [--host --port]` | The public multi-repository app (visitors bring their own API key); deploy it on [Render + Neon](docs/DEPLOY-RENDER.md) (free) or [your own server](docs/DEPLOY.md). |
 | `reposcout grammars` | Download the tree-sitter grammars ahead of time (Docker images, offline use). |
@@ -126,8 +126,10 @@ Review options: `--no-llm`, `--no-context`, `--format text|markdown|json`, `--mi
 
 ```bash
 export GITHUB_TOKEN=github_pat_...
-reposcout review-pr octo/shop#42 --post
+reposcout review-pr octo/shop#42 --post    # shows the review, then asks before posting
 ```
+
+Posting always asks first, naming the pull request and the account the comments will appear under. Only post on repositories you maintain or where the maintainers asked for it; unrequested automated reviews are spam under GitHub's terms.
 
 **2. As a GitHub Action.** `.github/workflows/reposcout-review.yml` reviews every pull request in this repository. Add a repository secret `REPOSCOUT_OPENAI_API_KEY` (and optionally variables `REPOSCOUT_OPENAI_BASE_URL` / `REPOSCOUT_LLM_MODEL`) to enable LLM review; without a key it runs the rules-only review. Note that GitHub does not give secrets or write access to workflows triggered by pull requests from forks.
 
