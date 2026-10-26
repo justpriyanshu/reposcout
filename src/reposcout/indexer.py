@@ -10,12 +10,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pathspec
 
 from .chunking import CHUNKER_VERSION, chunk_file
 from .embeddings import Embedder
 from .errors import ProviderError
-from .store import IndexStore
+from .store import BaseStore
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +184,7 @@ def _read_text(path: Path) -> tuple[str, str] | None:
 
 class Indexer:
     def __init__(
-        self, store: IndexStore, embedder: Embedder, max_file_bytes: int = 400_000, chunk_max_lines: int = 80
+        self, store: BaseStore, embedder: Embedder, max_file_bytes: int = 400_000, chunk_max_lines: int = 80
     ):
         self.store = store
         self.embedder = embedder
@@ -262,7 +263,7 @@ class Indexer:
                     chunks = chunk_file(rel, text, max_lines=self.chunk_max_lines)
                     if not chunks:
                         # Remember the hash anyway so empty files aren't re-read every run.
-                        self.store.replace_file(rel, digest, [], [])
+                        self.store.replace_file(rel, digest, [], np.empty((0, 0), dtype=np.float32))
                         stats.files_skipped += 1
                     else:
                         pending.append((rel, digest, chunks))

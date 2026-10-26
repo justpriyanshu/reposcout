@@ -137,3 +137,64 @@ def test_secret_files_are_never_indexed(sample_repo, settings):
     paths = set(store.file_hashes())
     assert ".env" not in paths and ".env.production" not in paths and "server.pem" not in paths
     assert ".env.example" in paths  # the template has no secrets and documents the settings
+
+
+needs_vec = pytest.mark.skipif(
+    not IndexStore(":memory:").use_vec, reason="sqlite-vec extension not available"
+)
+
+
+@needs_vec
+def test_sqlite_vec_and_numpy_backends_rank_the_same(sample_repo, tmp_path):
+    embedder = HashingEmbedder()
+    stores = {b: IndexStore(tmp_path / f"{b}.db", vector_backend=b) for b in ("sqlite-vec", "numpy")}
+    for store in stores.values():
+        Indexer(store, embedder).index(sample_repo)
+    assert stores["sqlite-vec"].stats()["vector_backend"] == "sqlite-vec"
+    query = embedder.embed(["session token signature"])[0]
+    vec_hits = stores["sqlite-vec"].vector_search(query, 5)
+    np_hits = stores["numpy"].vector_search(query, 5)
+    assert np.allclose([s for _, s in vec_hits], [s for _, s in np_hits], atol=1e-5)
+    # Same chunks in the same order, except that chunks with equal scores may swap.
+    np_scores = dict(np_hits)
+    assert all(abs(np_scores.get(i, -2) - s) < 1e-5 for i, s in vec_hits if s > vec_hits[-1][1] + 1e-5)
+
+
+@needs_vec
+def test_vector_index_follows_file_changes(sample_repo, tmp_path):
+    store = IndexStore(tmp_path / "i.db", vector_backend="sqlite-vec")
+    embedder = HashingEmbedder()
+    Indexer(store, embedder).index(sample_repo)
+    (sample_repo / "auth" / "session.py").unlink()
+    Indexer(store, embedder).index(sample_repo)
+    vec_ids = {r[0] for r in store.conn.execute("SELECT rowid FROM chunks_vec")}
+    chunk_ids = {r[0] for r in store.conn.execute("SELECT id FROM chunks")}
+    assert vec_ids == chunk_ids
+    store.clear()
+    assert store.vector_search(embedder.embed(["x"])[0], 3) == []
+
+
+@needs_vec
+def test_index_written_without_sqlite_vec_is_rebuilt_when_it_returns(sample_repo, tmp_path):
+    path = tmp_path / "i.db"
+    embedder = HashingEmbedder()
+    first = IndexStore(path, vector_backend="sqlite-vec")
+    Indexer(first, embedder).index(sample_repo)
+    first.close()
+    # Opened without the extension: chunks change but chunks_vec can't be updated...
+    plain = IndexStore(path, vector_backend="numpy")
+    (sample_repo / "auth" / "session.py").unlink()
+    Indexer(plain, embedder).index(sample_repo)
+    plain.close()
+    # ...so the next sqlite-vec open rebuilds it from the stored vectors.
+    again = IndexStore(path, vector_backend="sqlite-vec")
+    vec_ids = {r[0] for r in again.conn.execute("SELECT rowid FROM chunks_vec")}
+    assert vec_ids == {r[0] for r in again.conn.execute("SELECT id FROM chunks")}
+
+
+def test_find_references_returns_callers(indexed):
+    store, _ = indexed
+    callers = store.find_references("compare_digest")
+    assert [c.name for c in callers] == ["verify_token"]
+    assert store.find_references("compare_digest", exclude_paths={"auth/session.py"}) == []
+    assert store.find_references("nothing_calls_this") == []

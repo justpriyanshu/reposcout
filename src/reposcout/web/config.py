@@ -25,9 +25,14 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class PublicSettings:
-    # Where cloned repositories and their indexes are kept.
+    # Where cloned repositories (and, without a database, their indexes) are kept.
     data_dir: Path = field(
         default_factory=lambda: Path(_env("DATA_DIR", str(Path.home() / ".reposcout-data"))).resolve()
+    )
+    # Postgres with pgvector (e.g. Neon's free tier) for the registry and every index. Use
+    # it on hosts whose disk is wiped on restart, such as Render's free plan. Empty = files.
+    database_url: str = field(
+        default_factory=lambda: _env("DATABASE_URL", "") or os.environ.get("DATABASE_URL", "")
     )
 
     # The chat API visitors' keys are sent to. Fixed on the server so visitors can't point
@@ -51,6 +56,9 @@ class PublicSettings:
     max_files: int = field(default_factory=lambda: _env_int("MAX_FILES", 3000))
     max_chunks: int = field(default_factory=lambda: _env_int("MAX_CHUNKS", 12000))
     max_repos: int = field(default_factory=lambda: _env_int("MAX_REPOS", 30))
+    # Chunks kept across all repositories (0 = no limit). One chunk takes ~4 KB in Postgres
+    # with 768-dimension vectors, so 60,000 fits Neon's free 0.5 GB with room to spare.
+    max_total_chunks: int = field(default_factory=lambda: _env_int("MAX_TOTAL_CHUNKS", 60000))
     reindex_after_hours: int = field(default_factory=lambda: _env_int("REINDEX_AFTER_HOURS", 12))
     max_pr_files: int = field(default_factory=lambda: _env_int("MAX_PR_FILES", 40))
     max_pr_lines: int = field(default_factory=lambda: _env_int("MAX_PR_LINES", 4000))
@@ -58,6 +66,9 @@ class PublicSettings:
     index_timeout_minutes: int = field(default_factory=lambda: _env_int("INDEX_TIMEOUT_MINUTES", 20))
     max_queued: int = field(default_factory=lambda: _env_int("MAX_QUEUED", 8))
 
+    # Where rate-limit counters live: "memory://" for one server, "redis://host:6379" to
+    # share them across servers (needs the redis package).
+    rate_limit_storage: str = field(default_factory=lambda: _env("RATE_LIMIT_STORAGE", "memory://"))
     # Requests allowed per visitor (by IP address).
     index_per_hour: int = field(default_factory=lambda: _env_int("LIMIT_INDEX_PER_HOUR", 6))
     llm_per_10min: int = field(default_factory=lambda: _env_int("LIMIT_LLM_PER_10MIN", 40))
@@ -70,6 +81,10 @@ class PublicSettings:
     # Set when running behind a reverse proxy (Caddy, nginx) so the visitor's real IP comes
     # from the X-Real-IP header the proxy sets. Never enable it when the app is exposed directly.
     trust_proxy: bool = field(default_factory=lambda: _env_bool("TRUST_PROXY", False))
+
+    # Record visitors' LLM calls in Langfuse (needs LANGFUSE_* keys). Off by default: the
+    # prompts contain visitors' questions.
+    trace_public: bool = field(default_factory=lambda: _env_bool("TRACE_PUBLIC", False))
 
     top_k: int = field(default_factory=lambda: _env_int("TOP_K", 6))
     max_context_chars: int = field(default_factory=lambda: _env_int("MAX_CONTEXT_CHARS", 16000))

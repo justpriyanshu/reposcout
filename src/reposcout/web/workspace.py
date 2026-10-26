@@ -1,8 +1,16 @@
 """Many repositories on one server: clone safely, index in the background, evict old ones.
 
-Each repository gets its own checkout (``data_dir/repos/<key>``) and its own index file
-(``data_dir/indexes/<key>.db``). A small SQLite registry tracks their status so the web
+Each repository is cloned into a temporary checkout (``data_dir/repos/<key>``), indexed,
+and the checkout deleted. A registry table tracks every repository's status so the web
 page can show progress, and so jobs interrupted by a restart are picked up again.
+
+Two storage modes:
+
+* **Files** (default): the registry is ``data_dir/workspace.db`` and each index is its own
+  SQLite file in ``data_dir/indexes``.
+* **Postgres** (``REPOSCOUT_DATABASE_URL``): the registry and every index live in one
+  Postgres database with pgvector, e.g. Neon's free tier. Hosts with an ephemeral disk
+  (Render's free plan) then keep their indexes across restarts and redeploys.
 """
 
 from __future__ import annotations
@@ -20,12 +28,13 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, Protocol
 
 from ..chunking import chunk_file
 from ..embeddings import Embedder
 from ..errors import ProviderError, RepoScoutError
 from ..indexer import Indexer, iter_repo_files
-from ..store import IndexStore
+from ..store import BaseStore, IndexStore
 from .config import PublicSettings
 from .github_public import GitHubAPIError, PublicGitHub
 from .links import RepoId
@@ -62,6 +71,7 @@ CREATE TABLE IF NOT EXISTS repos (
     requested_by TEXT NOT NULL DEFAULT ''
 );
 """
+PG_SCHEMA = SCHEMA.replace(" REAL ", " DOUBLE PRECISION ").replace("stars INTEGER", "stars BIGINT")
 
 MIN_REFRESH_SECONDS = 3600  # a "refresh" is ignored if the index is newer than this
 FAILED_TTL_SECONDS = 86400  # failed rows are forgotten after a day
@@ -223,6 +233,172 @@ def _folder_size(path: Path) -> int:
     return total
 
 
+class IndexBackend(Protocol):
+    """Where indexes live. ``begin`` returns a store plus a build token that ``install``
+    turns into the reference saved in the registry (``index_file``)."""
+
+    def begin(self, key: str) -> tuple[BaseStore, Any]: ...
+    def abort(self, token: Any) -> None: ...
+    def install(self, key: str, token: Any) -> str: ...
+    def open(self, ref: str) -> BaseStore | None: ...
+    def drop(self, ref: str) -> None: ...
+    def cleanup(self, refs: set[str]) -> None: ...
+
+
+class FileIndexes:
+    """Each index is a SQLite file in ``index_dir``; a reference is the file name."""
+
+    def __init__(self, index_dir: Path):
+        self.index_dir = index_dir
+
+    def begin(self, key: str) -> tuple[BaseStore, Path]:
+        tmp = self.index_dir / f"{key}.building.db"
+        self.abort(tmp)
+        return IndexStore(tmp), tmp
+
+    def abort(self, token: Path) -> None:
+        for suffix in ("", "-wal", "-shm"):
+            Path(f"{token}{suffix}").unlink(missing_ok=True)
+
+    def install(self, key: str, token: Path) -> str:
+        """Move the finished index under a new name. Requests still reading the previous
+        index keep their open file; it disappears once they finish."""
+        name = f"{key}.{time.time_ns()}.db"
+        os.replace(token, self.index_dir / name)
+        return name
+
+    def open(self, ref: str) -> BaseStore | None:
+        path = self.index_dir / ref
+        return IndexStore(path) if path.exists() else None
+
+    def drop(self, ref: str) -> None:
+        self.abort(self.index_dir / ref)
+
+    def cleanup(self, refs: set[str]) -> None:
+        """Delete index files no registry row points at (left by a crash)."""
+        for path in self.index_dir.glob("*.db"):
+            if path.name not in refs and not path.name.endswith(".building.db"):
+                self.drop(path.name)
+
+
+class PgIndexes:
+    """Each index is a generation in Postgres; a reference is ``pg:<id>``.
+
+    A replaced or evicted generation is *retired* rather than dropped at once, so requests
+    still reading it can finish (the file backend gets this for free from open files)."""
+
+    RETIRE_SECONDS = 60.0
+
+    def __init__(self, db):
+        self.db = db
+        self._retired: list[tuple[float, int]] = []
+        self._lock = threading.Lock()
+
+    def begin(self, key: str) -> tuple[BaseStore, int]:
+        from ..pg_store import PgIndexStore
+
+        index_id = self.db.create_index(key)
+        return PgIndexStore(self.db, index_id), index_id
+
+    def abort(self, token: int) -> None:
+        self.db.drop_index(token)
+
+    def install(self, key: str, token: int) -> str:
+        return f"pg:{token}"
+
+    @staticmethod
+    def _id(ref: str) -> int | None:
+        return int(ref[3:]) if ref.startswith("pg:") and ref[3:].isdigit() else None
+
+    def open(self, ref: str) -> BaseStore | None:
+        from ..pg_store import PgIndexStore
+
+        index_id = self._id(ref)
+        if index_id is None or not self.db.index_exists(index_id):
+            return None
+        return PgIndexStore(self.db, index_id)
+
+    def drop(self, ref: str) -> None:
+        index_id = self._id(ref)
+        with self._lock:
+            if index_id is not None:
+                self._retired.append((time.monotonic(), index_id))
+        self.reap()
+
+    def reap(self, force: bool = False) -> None:
+        """Drop retired generations once nobody can still be reading them."""
+        cutoff = time.monotonic() - self.RETIRE_SECONDS
+        with self._lock:
+            due = [i for when, i in self._retired if force or when <= cutoff]
+            self._retired = [(when, i) for when, i in self._retired if i not in due]
+        for index_id in due:
+            self.db.drop_index(index_id)
+
+    def cleanup(self, refs: set[str]) -> None:
+        """Drop generations no registry row points at: half-built or retired ones left by a
+        restart. (Assumes one app server per database, which is how this app is deployed.)"""
+        keep = {self._id(r) for r in refs}
+        for index_id in self.db.index_ids() - keep:
+            self.db.drop_index(index_id)
+
+
+class _Rows:
+    def __init__(self, rows: list):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self) -> list:
+        return self._rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class PgRegistry:
+    """Just enough of ``sqlite3.Connection`` for the registry code to run on Postgres:
+    ``execute`` with ``?`` placeholders, and ``with registry:`` as one transaction."""
+
+    def __init__(self, db):
+        self.db = db
+        self._local = threading.local()
+
+    def __enter__(self):
+        depth = getattr(self._local, "depth", 0)
+        if depth == 0:
+            pooled = self.db.connection()
+            conn = pooled.__enter__()
+            tx = conn.transaction()
+            tx.__enter__()
+            self._local.pooled, self._local.conn, self._local.tx = pooled, conn, tx
+        self._local.depth = depth + 1
+        return self
+
+    def __exit__(self, *exc_info):
+        self._local.depth -= 1
+        if self._local.depth == 0:
+            pooled, tx = self._local.pooled, self._local.tx
+            self._local.conn = None
+            try:
+                tx.__exit__(*exc_info)
+            finally:
+                pooled.__exit__(*exc_info)
+        return False
+
+    def execute(self, sql: str, args: tuple = ()):
+        sql = sql.replace("?", "%s")
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            return _Rows(_fetch(conn.execute(sql, args)))
+        with self.db.connection() as fresh:
+            return _Rows(_fetch(fresh.execute(sql, args)))
+
+
+def _fetch(cursor) -> list:
+    return cursor.fetchall() if cursor.description else []
+
+
 class Workspace:
     def __init__(
         self,
@@ -230,7 +406,10 @@ class Workspace:
         embedder: Embedder,
         github: PublicGitHub | None = None,
         cloner: Cloner | None = None,
+        db=None,
     ):
+        """``db`` is a ``pg_store.PgDatabase``; by default one is opened when
+        ``settings.database_url`` is set, otherwise everything is stored in files."""
         self.settings = settings
         self.embedder = embedder
         self.github = github
@@ -249,13 +428,30 @@ class Workspace:
         self.repos_dir.mkdir(parents=True, exist_ok=True)
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._db = sqlite3.connect(str(settings.data_dir / "workspace.db"), check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
-        self._db.executescript(SCHEMA)
-        columns = {r["name"] for r in self._db.execute("PRAGMA table_info(repos)")}
-        if "requested_by" not in columns:  # registries created by an older version
-            self._db.execute("ALTER TABLE repos ADD COLUMN requested_by TEXT NOT NULL DEFAULT ''")
-        self._stores: OrderedDict[str, IndexStore] = OrderedDict()
+        if db is None and settings.database_url:
+            from ..pg_store import PgDatabase
+
+            db = PgDatabase.shared(settings.database_url)
+        if db is not None:
+            db.ensure_schema()
+        self.pg = db
+        self.indexes: IndexBackend
+        if db is not None:
+            self._db = PgRegistry(db)
+            with self._db:
+                self._db.execute(PG_SCHEMA)
+            self.indexes = PgIndexes(db)
+            self._latest = "GREATEST"
+        else:
+            self._db = sqlite3.connect(str(settings.data_dir / "workspace.db"), check_same_thread=False)
+            self._db.row_factory = sqlite3.Row
+            self._db.executescript(SCHEMA)
+            columns = {r["name"] for r in self._db.execute("PRAGMA table_info(repos)")}
+            if "requested_by" not in columns:  # registries created by an older version
+                self._db.execute("ALTER TABLE repos ADD COLUMN requested_by TEXT NOT NULL DEFAULT ''")
+            self.indexes = FileIndexes(self.index_dir)
+            self._latest = "MAX"  # SQLite's two-argument MAX is Postgres's GREATEST
+        self._stores: OrderedDict[str, BaseStore] = OrderedDict()
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker: threading.Thread | None = None
         self._stopping = threading.Event()
@@ -269,10 +465,15 @@ class Workspace:
                     "UPDATE repos SET status='queued', stage='Waiting to start' WHERE key=?", (row["key"],)
                 )
                 self._queue.put(row["key"])
+            refs = {
+                r["index_file"]
+                for r in self._db.execute("SELECT index_file FROM repos WHERE index_file != ''")
+            }
+        self.indexes.cleanup(refs)
 
     # ------------------------------------------------------------------ registry
 
-    def _row(self, key: str) -> sqlite3.Row | None:
+    def _row(self, key: str):
         with self._lock:
             return self._db.execute("SELECT * FROM repos WHERE key = ?", (key,)).fetchone()
 
@@ -290,7 +491,7 @@ class Workspace:
         with self._lock:
             rows = self._db.execute(
                 "SELECT * FROM repos WHERE has_index = 1 OR status IN (?, ?, ?) "
-                "ORDER BY MAX(last_used, updated_at) DESC LIMIT ?",
+                f"ORDER BY {self._latest}(last_used, updated_at) DESC LIMIT ?",
                 (*ACTIVE, limit),
             ).fetchall()
         return [self._public(r) for r in rows]
@@ -303,7 +504,7 @@ class Workspace:
         keys = [r["key"] for r in rows]
         return keys.index(key) + 1 if key in keys else 0
 
-    def _public(self, row: sqlite3.Row) -> dict:
+    def _public(self, row) -> dict:
         data = dict(row)
         data.pop("index_file", None)
         data.pop("requested_by", None)
@@ -335,7 +536,8 @@ class Workspace:
             else:
                 sql = "SELECT COUNT(*) FROM repos WHERE status IN (?, ?, ?) AND requested_by = ?"
                 args = (*ACTIVE, requested_by)
-            return self._db.execute(sql, args).fetchone()[0]
+            row = self._db.execute(sql, args).fetchone()
+            return int(row[0]) if row else 0
 
     def submit(self, repo: RepoId, force: bool = False, requested_by: str = "") -> dict:
         """Queue a repository for (re-)indexing unless it's fresh or already in progress.
@@ -368,7 +570,9 @@ class Workspace:
                     (repo.key, repo.owner, repo.name, now, now, now, requested_by),
                 )
         self._queue.put(repo.key)
-        return self.get(repo)
+        record = self.get(repo)
+        assert record is not None
+        return record
 
     def _prune_failed(self, now: float) -> None:
         self._db.execute(
@@ -410,7 +614,7 @@ class Workspace:
         repo = RepoId(row["owner"], row["name"])
         had_index = bool(row["has_index"])
         work_dir = self.repos_dir / f"{key}.incoming"
-        tmp_index = self.index_dir / f"{key}.building.db"
+        building = None  # the half-built index, dropped if the job fails
         try:
             self._check_metadata(repo)
             self._update(key, status="cloning", stage="Downloading code")
@@ -426,8 +630,9 @@ class Workspace:
             self._update(
                 key, status="indexing", stage="Reading the code", files_total=len(files), files_done=0
             )
-            self._build_index(key, work_dir, tmp_index)
-            self._install(key, work_dir, tmp_index)
+            building = self._build_index(key, work_dir)
+            self._install(key, work_dir, building)
+            building = None
             store = self.store(repo)
             stats = store.stats() if store else {"chunks": 0}
             self._update(
@@ -449,8 +654,9 @@ class Workspace:
             if isinstance(exc, ProviderError):
                 message = "The embedding service is unavailable right now. Please try again shortly."
             shutil.rmtree(work_dir, ignore_errors=True)
-            for suffix in ("", "-wal", "-shm"):
-                Path(f"{tmp_index}{suffix}").unlink(missing_ok=True)
+            if building is not None:
+                with contextlib.suppress(Exception):
+                    self.indexes.abort(building)
             # A failed refresh keeps serving the previous index.
             status = "ready" if had_index else "failed"
             self._update(key, status=status, stage="Failed" if not had_index else "Ready", error=message)
@@ -511,10 +717,9 @@ class Workspace:
                 )
         return files
 
-    def _build_index(self, key: str, root: Path, tmp_index: Path) -> None:
-        for suffix in ("", "-wal", "-shm"):
-            Path(f"{tmp_index}{suffix}").unlink(missing_ok=True)
-        store = IndexStore(tmp_index)
+    def _build_index(self, key: str, root: Path):
+        """Index ``root`` into a new, not yet visible index. Returns its build token."""
+        store, token = self.indexes.begin(key)
         last = [0.0]
         deadline = time.monotonic() + self.settings.index_timeout_minutes * 60
 
@@ -531,42 +736,41 @@ class Workspace:
 
         try:
             Indexer(store, self.embedder, MAX_FILE_BYTES).index(root, on_progress=progress)
-        finally:
-            store.conn.close()
+        except BaseException:
+            store.close()
+            self.indexes.abort(token)
+            raise
+        store.close()
+        return token
 
-    def _index_path(self, key: str) -> Path | None:
+    def _index_ref(self, key: str) -> str | None:
         row = self._row(key)
-        if row is None or not row["index_file"]:
-            return None
-        return self.index_dir / row["index_file"]
+        return row["index_file"] if row is not None and row["index_file"] else None
 
-    def _install(self, key: str, work_dir: Path, tmp_index: Path) -> None:
-        """Swap the new index in under a new file name.
+    def _install(self, key: str, work_dir: Path, token) -> None:
+        """Point the registry at the new index and drop the previous one.
 
-        Requests still reading the previous index keep using their open file; it is
-        unlinked here and disappears once they finish. The checkout isn't needed after
-        indexing (chunks are stored in the index), so it is deleted to save disk."""
-        new_name = f"{key}.{time.time_ns()}.db"
-        old_path = self._index_path(key)
+        The checkout isn't needed after indexing (chunks are stored in the index), so it
+        is deleted to save disk."""
+        old_ref = self._index_ref(key)
         with self._lock:
-            os.replace(tmp_index, self.index_dir / new_name)
-            self._update(key, index_file=new_name)
+            new_ref = self.indexes.install(key, token)
+            self._update(key, index_file=new_ref)
             self._stores.pop(key, None)
-            if old_path is not None:
-                for suffix in ("", "-wal", "-shm"):
-                    Path(f"{old_path}{suffix}").unlink(missing_ok=True)
+            if old_ref is not None:
+                self.indexes.drop(old_ref)
         shutil.rmtree(work_dir, ignore_errors=True)
 
-    def store(self, repo: RepoId) -> IndexStore | None:
+    def store(self, repo: RepoId) -> BaseStore | None:
         with self._lock:
             store = self._stores.get(repo.key)
             if store is not None:
                 self._stores.move_to_end(repo.key)
                 return store
-            path = self._index_path(repo.key)
-            if path is None or not path.exists():
+            ref = self._index_ref(repo.key)
+            store = self.indexes.open(ref) if ref else None
+            if store is None:
                 return None
-            store = IndexStore(path)
             self._stores[repo.key] = store
             while len(self._stores) > MAX_OPEN_STORES:
                 # Drop the least recently used. Its connection closes once no request uses it.
@@ -578,22 +782,28 @@ class Workspace:
             self._db.execute("UPDATE repos SET last_used = ? WHERE key = ?", (time.time(), repo.key))
 
     def _evict(self) -> None:
-        """Keep at most ``max_repos`` indexed repositories; drop the least recently used."""
+        """Keep at most ``max_repos`` indexed repositories and ``max_total_chunks`` chunks
+        in all (a free database has little storage); drop the least recently used. The
+        most recent repository is always kept."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT key FROM repos WHERE has_index = 1 AND status = 'ready' "
-                "ORDER BY MAX(last_used, indexed_at) DESC"
+                "SELECT key, chunks FROM repos WHERE has_index = 1 AND status = 'ready' "
+                f"ORDER BY {self._latest}(last_used, indexed_at) DESC"
             ).fetchall()
-            for row in rows[self.settings.max_repos :]:
-                self._delete(row["key"])
+            total = 0
+            budget = self.settings.max_total_chunks
+            for position, row in enumerate(rows):
+                total += int(row["chunks"])
+                over_budget = budget > 0 and total > budget and position > 0
+                if position >= self.settings.max_repos or over_budget:
+                    self._delete(row["key"])
 
     def _delete(self, key: str) -> None:
         with self._lock:
             self._stores.pop(key, None)
-            index = self._index_path(key)
-            if index is not None:
-                for suffix in ("", "-wal", "-shm"):
-                    Path(f"{index}{suffix}").unlink(missing_ok=True)
+            ref = self._index_ref(key)
+            if ref is not None:
+                self.indexes.drop(ref)
             with self._db:
                 self._db.execute("DELETE FROM repos WHERE key = ?", (key,))
             log.info("Evicted %s", key)
