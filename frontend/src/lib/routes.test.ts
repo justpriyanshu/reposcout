@@ -5,6 +5,12 @@ test("empty and unknown routes go home", () => {
   for (const hash of ["", "#", "#/", "#/zzz", "#/zzz/a/b", "#/r/o/n"]) expect(parseRoute(hash), hash).toEqual({ view: "home" });
 });
 
+test("the signed-in person's GitHub repositories", () => {
+  expect(parseRoute("#/github")).toEqual({ view: "github" });
+  expect(parseRoute("#/github/")).toEqual({ view: "github" });
+  expect(parseRoute("#/github/x")).toEqual({ view: "home" });
+});
+
 test("tool page without a repository", () => {
   expect(parseRoute("#/ask")).toEqual({ view: "tool", tool: "ask" });
   expect(parseRoute("#/review/")).toEqual({ view: "tool", tool: "review" });

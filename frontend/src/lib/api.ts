@@ -45,7 +45,8 @@ export async function api<T = unknown>(path: string, { method = "GET", body, key
   if (withKey && saved.model) headers["X-LLM-Model"] = saved.model;
   let resp: Response;
   try {
-    resp = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal });
+    // Same-origin cookies identify the visitor (signed in, or this browser's own anonymous list).
+    resp = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal, credentials: "same-origin" });
   } catch {
     throw new ApiError(0, "network", "Can't reach the server. Check your connection and try again.");
   }

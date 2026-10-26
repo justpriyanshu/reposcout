@@ -42,7 +42,7 @@ function themeInit(): Plugin {
   };
 }
 
-const proxied = ["/api", "/health", "/stats", "/search", "/ask", "/review", "/reviews"];
+const proxied = ["/api", "/auth", "/health", "/stats", "/search", "/ask", "/review", "/reviews"];
 
 export default defineConfig({
   base: BASE,
@@ -55,8 +55,10 @@ export default defineConfig({
     rolldownOptions: {
       input: { app: here("./app.html"), index: here("./index.html") },
       output: {
-        // React, TanStack Query, Radix and Sonner change rarely: one long-cached vendor file.
-        codeSplitting: { groups: [{ name: "vendor", test: /node_modules/ }, { name: "ui", test: /src\/(styles|components|hooks|lib)\// }] },
+        // React, TanStack Query, Radix and Sonner change rarely: one long-cached vendor file. The
+        // shared QueryClient goes with the ui code: as a chunk of its own it picked up the bundler's
+        // CommonJS runtime, which vendor imports, while it imports vendor, and neither page started.
+        codeSplitting: { groups: [{ name: "vendor", test: /node_modules/ }, { name: "ui", test: /src\/(styles|components|hooks|lib)\/|src\/app\/queryClient/ }] },
       },
     },
   },

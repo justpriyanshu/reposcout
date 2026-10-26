@@ -20,6 +20,13 @@ describe("api", () => {
     expect(sentHeaders(fetch)).toEqual({ "Content-Type": "application/json" });
   });
 
+  test("requests send the same-origin cookies that say whose list it is", async () => {
+    const fetch = stubFetch(200, { ok: true });
+    await api("/api/logout", { method: "POST", body: {} });
+    expect(fetch.mock.calls[0][1]?.credentials).toBe("same-origin");
+    expect(fetch.mock.calls[0][1]?.body).toBe("{}");
+  });
+
   test("withKey sends the saved key and model; an explicit key wins and sends no model", async () => {
     const fetch = stubFetch(200, {});
     setCredentials(() => ({ key: "gsk_saved", model: "m1" }));

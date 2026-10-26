@@ -22,6 +22,7 @@ export interface RepoRecord {
   name?: string;
   full_name?: string;
   key?: string;
+  /** queued, cloning, indexing, ready, failed, or expired (the server dropped the index to save space; ready is false). */
   status?: string;
   ready?: boolean;
   error?: string | null;
@@ -37,7 +38,10 @@ export interface RepoRecord {
 export interface RepoRoute { tool: ToolId; owner: string; name: string }
 
 export const repoPath = (owner: string, name: string) => `/api/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+/** The caller's own list (signed in, or this browser's), most recently used first. */
 export const reposQuery = { queryKey: ["repos"], queryFn: () => api<{ repos: RepoRecord[] }>("/api/repos") };
+/** Indexed once but dropped since: it needs indexing again before it can be used. */
+export const isExpired = (r: RepoRecord | null | undefined): boolean => !!r && r.status === "expired" && !r.ready;
 const repoKey = (owner: string, name: string, ...rest: string[]) => ["repo", owner.toLowerCase(), name.toLowerCase(), ...rest];
 
 /** Run the router again for the same hash (a fresh view). */
@@ -243,7 +247,8 @@ function FailureCard({ full, reason, refresh, toolId, onRetry }: { full: string;
 }
 
 /**
- * Make sure owner/name is indexed: GET the record, POST /api/repos on 404, then poll every 1.5 s
+ * Make sure owner/name is indexed: GET the record, POST /api/repos on 404 (not in the caller's list
+ * yet) or when its index expired, then poll every 1.5 s
  * until it is ready or failed. A few failed polls in a row are tolerated (a blip); the eighth ends it.
  */
 export function useIndexedRepo(owner: string, name: string) {
@@ -258,6 +263,7 @@ export function useIndexedRepo(owner: string, name: string) {
       try {
         const { repo } = await api<{ repo: RepoRecord }>(repoPath(owner, name));
         misses.current = 0;
+        if (isExpired(repo)) return (await api<{ repo: RepoRecord }>("/api/repos", { method: "POST", body: { url: `${owner}/${name}` } })).repo;
         return repo;
       } catch (err) {
         if (!prev) {
@@ -270,7 +276,7 @@ export function useIndexedRepo(owner: string, name: string) {
     },
     refetchInterval: (q) => {
       const r = q.state.data;
-      return q.state.status !== "error" && r && !r.ready && r.status !== "failed" ? POLL_MS : false;
+      return q.state.status !== "error" && r && !r.ready && r.status !== "failed" && !isExpired(r) ? POLL_MS : false;
     },
   });
   const retry = () => { misses.current = 0; void qc.resetQueries({ queryKey: key }); };
@@ -332,7 +338,7 @@ export function LookupTool({ route, children }: { route: RepoRoute; children: Re
   const base = { owner, name, full_name: full };
   const bar = lookup.isPending ? <RepoBar record={base} toolId={toolId} />
     : lookup.isError ? <RepoBar record={{ ...base, status: "unknown" }} toolId={toolId} /> // claim neither missing nor ready
-    : lookup.data ? <RepoBar record={lookup.data} toolId={toolId} />
+    : lookup.data && !isExpired(lookup.data) ? <RepoBar record={lookup.data} toolId={toolId} />
     : <RepoBar record={base} indexed={false} toolId={toolId} />;
   return (
     <ToolFrame toolId={toolId} repo={{ owner, name }}>

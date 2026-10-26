@@ -4,6 +4,7 @@ export type ToolId = "ask" | "find" | "review";
 
 export type Route =
   | { view: "home" }
+  | { view: "github" }
   | { view: "tool"; tool: ToolId; owner?: string; name?: string; pull?: number };
 
 const TOOL_IDS: readonly string[] = ["ask", "find", "review"];
@@ -19,7 +20,8 @@ function parts(hash: string | null | undefined): string[] | null {
   }
 }
 
-/** "#/review/o/n/12" -> {view: "tool", tool: "review", owner: "o", name: "n", pull: 12}; anything unknown -> home. */
+/** "#/review/o/n/12" -> {view: "tool", tool: "review", owner: "o", name: "n", pull: 12}; "#/github" -> the
+ * signed-in person's GitHub repositories; anything unknown -> home. */
 export function parseRoute(hash: string | null | undefined): Route {
   const p = parts(hash);
   if (p === null) {
@@ -27,6 +29,7 @@ export function parseRoute(hash: string | null | undefined): Route {
     return isTool(tool) ? { view: "tool", tool } : { view: "home" };
   }
   const [tool, owner, name, num] = p;
+  if (tool === "github" && p.length === 1) return { view: "github" };
   if (!isTool(tool)) return { view: "home" };
   const route: Route = { view: "tool", tool };
   if (!OWNER_RE.test(owner || "") || !NAME_RE.test(name || "")) return route; // same shapes as parseLink: else the picker

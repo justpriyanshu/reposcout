@@ -200,8 +200,26 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .menu a.soon { color: var(--text-3); pointer-events: none; }
 .menu a .pill { margin-left: auto; height: 20px; font-size: var(--t-xs); }
 .navpos { position: relative; }
+/* account: "Sign in with GitHub", or the avatar and login opening a small menu */
+.avatar { display: inline-grid; place-items: center; flex: none; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); color: var(--text-2); font: 700 var(--t-xs)/1 var(--mono); object-fit: cover; }
+.acctpos { position: relative; }
+.btn.acct { gap: 8px; padding: 0 8px; color: var(--text); }
+.btn.acct .lbl { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
+.acctmenu { position: absolute; top: 48px; right: 0; z-index: 40; display: grid; gap: 2px; width: 260px; padding: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--card); box-shadow: var(--shadow-pop);
+  transform-origin: top right; animation: pop var(--d-menu) var(--ease-out); }
+.acctmenu .who { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 4px; padding: 6px 8px 10px; border-bottom: 1px solid var(--line); }
+.acctmenu .who > span { display: grid; min-width: 0; }
+.acctmenu .who b, .acctmenu .who span span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-sm); }
+.acctmenu .who span span { color: var(--text-3); }
+.acctmenu a, .acctmenu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: var(--r-md); background: none; color: var(--text); font-size: var(--t-sm); font-weight: 600; text-align: left; cursor: pointer; }
+.acctmenu button:disabled { opacity: .45; cursor: not-allowed; }
+@media (pointer: coarse) { .acctmenu a, .acctmenu button { min-height: var(--ctl-touch); } }
+/* phones: just the avatar, so the bar fits at 360 px */
+@media (max-width: 560px) { .btn.acct { width: 40px; padding: 0; } .btn.acct > svg { display: none; } }
 @media (max-width: 820px) {
-  .navlink.direct, .keystate .lbl { display: none; }
+  .navlink.direct, .keystate .lbl, .btn.acct .lbl, .btn.signin .lbl { display: none; }
+  .btn.signin { width: 40px; padding: 0; }
+  .acctmenu { position: fixed; top: 60px; right: 8px; width: min(300px, calc(100vw - 16px)); }
   .burger { display: inline-flex; }
   .navpos .menu-btn { display: none; }
   .menu { position: fixed; top: 60px; left: 8px; right: 8px; width: auto; max-height: calc(100dvh - 72px); overflow: auto; grid-template-columns: minmax(0, 1fr); }
@@ -245,10 +263,37 @@ kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; 
 .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--s-4); align-items: center; padding: var(--s-3) var(--s-4); color: var(--text); cursor: pointer; }
 .row + .row { border-top: 1px solid var(--line); }
 .row:hover { text-decoration: none; }
-@media (hover: hover) and (pointer: fine) { .row:hover { background: var(--hover); } }
+@media (hover: hover) and (pointer: fine) { .row:hover { background: var(--hover); } .row.gh:hover { background: none; } }
 .row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 var(--t-sm) var(--mono); }
 .row .ds { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--t-sm); }
 .row .pill { grid-row: 1 / span 2; grid-column: 2; }
+/* the visitor's own repositories: the name is the row's link (stretched over it); the actions sit above it */
+#mine-h:focus { outline: none; }
+.row.mine { position: relative; grid-template-columns: minmax(0, 1fr) auto auto; cursor: default; }
+.row.mine .nm { color: var(--text); }
+.row.mine .nm:hover { text-decoration: none; }
+.row.mine .nm::after { content: ""; position: absolute; inset: 0; }
+.row.mine .nm:focus-visible { outline: none; }
+.row.mine .nm:focus-visible::after { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: var(--r-lg); }
+.row.mine .acts, .row.gh .acts { position: relative; z-index: 1; display: flex; align-items: center; gap: var(--s-1); grid-column: 3; grid-row: 1 / span 2; }
+.row.mine .acts .btn, .row.gh .acts .btn { height: 32px; } .row.mine .acts .btn.icon, .row.gh .acts .btn.icon { width: 32px; }
+.btn.ghcta { margin-top: var(--s-3); }
+@media (max-width: 560px) {
+  .row.mine { grid-template-columns: minmax(0, 1fr) auto; }
+  .row.mine .pill { grid-row: 3; grid-column: 1; justify-self: start; margin-top: 4px; }
+  .row.mine .acts { grid-row: 1 / span 3; grid-column: 2; }
+}
+/* the signed-in person's GitHub repositories (#/github) */
+.ticon.gh { --main: var(--text); --tint: var(--panel); }
+.ghbody { max-width: 820px; margin-top: var(--s-8); }
+.ghfilter { margin-bottom: var(--s-4); }
+.row.gh { grid-template-columns: minmax(0, 1fr) auto; cursor: default; }
+.row.gh .mt { grid-column: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s-3); color: var(--text-3); font-size: var(--t-sm); }
+.row.gh .mt > span { display: inline-flex; align-items: center; gap: 4px; }
+.row.gh .mt .pill { height: 20px; font-size: var(--t-xs); }
+.row.gh .acts { grid-column: 2; grid-row: 1 / span 3; }
+/* phones: GitHub rows give the name the full width; the actions go underneath */
+@media (max-width: 560px) { .row.gh { grid-template-columns: minmax(0, 1fr); } .row.gh .acts { grid-column: 1; grid-row: auto; margin-top: var(--s-2); } }
 footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border-top: 1px solid var(--line); color: var(--text-3); font-size: var(--t-sm); }
 @media (max-width: 960px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) {
@@ -456,6 +501,7 @@ footer.site { margin-top: var(--s-16); padding: var(--s-8) 0 var(--s-12); border
 @media (hover: hover) and (pointer: fine) {
   .navlink:hover { background: var(--hover); color: var(--text); text-decoration: none; }
   .menu a:hover { background: var(--hover); text-decoration: none; }
+  .acctmenu a:hover, .acctmenu button:not(:disabled):hover { background: var(--hover); text-decoration: none; }
   .aside .others a:hover { background: var(--hover); text-decoration: none; }
   .src:hover { color: var(--text); border-color: var(--line-strong); text-decoration: none; }
 }
@@ -492,7 +538,7 @@ main:focus { outline: none; }
 .skel.w-60 { width: 60%; } .skel.w-75 { width: 75%; } .skel.w-80 { width: 80%; } .skel.w-90 { width: 90%; } .skel.block { height: 96px; border-radius: var(--r-md); }
 
 @media (prefers-reduced-motion: reduce) {
-  .enter, .dialog, .menu { animation-name: fade; }
+  .enter, .dialog, .menu, .acctmenu { animation-name: fade; }
   .skel { animation-duration: calc(var(--d-pulse) * 2); }
   .btn:active, .chip:active, .sev:active, .starter:active, .tile:active { transform: none; }
   .tile:hover .go svg { transform: none; }
