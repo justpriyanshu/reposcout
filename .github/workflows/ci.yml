@@ -6,23 +6,81 @@ on:
   pull_request:
 
 jobs:
-  test:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run typecheck
+      - run: npm --prefix frontend run test:coverage
+      - run: npm --prefix frontend run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: src/reposcout/static/dist
+          retention-days: 1
+      - name: End-to-end tests (Playwright, API mocked)
+        run: |
+          cd frontend && npx playwright install --with-deps chromium
+          E2E_SKIP_BUILD=1 npm run test:e2e
+
+  python:
+    needs: frontend
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.10", "3.12", "3.13"]
+    services:
+      # Runs the Postgres store and workspace tests (they're skipped without a database).
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      REPOSCOUT_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
-      - run: ruff check src tests
-      - run: ruff format --check src tests
-      - run: pytest
-      - uses: actions/setup-node@v4
+          enable-cache: true
+      - uses: actions/download-artifact@v8
         with:
-          node-version: "24"
-      - run: node --test "tests/js/*.test.mjs"
+          name: web-dist
+          path: src/reposcout/static/dist
+      - run: uv sync --all-extras --group dev
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run pyright
+        if: matrix.python-version == '3.12'
+      - name: Install gitleaks (used by the scanner tests)
+        run: |
+          uv run python deploy/fetch_gitleaks.py 8.30.1 "$RUNNER_TEMP/gitleaks"
+          echo "REPOSCOUT_GITLEAKS_BIN=$RUNNER_TEMP/gitleaks" >> "$GITHUB_ENV"
+      - run: uv run reposcout grammars
+      - run: uv run pytest --cov --cov-report=term --cov-report=xml
       - name: Rules-only review eval (no model needed)
-        run: reposcout eval review evals/review_cases.json --no-llm --embed-provider hash
+        run: uv run reposcout eval review evals/review_cases.json --no-llm --embed-provider hash
+
+  semgrep:
+    # Semgrep's community rules on every change. Reviews in the app use Bandit and
+    # gitleaks; Semgrep is too heavy to start for every file on a small server.
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.179.0
+    steps:
+      - uses: actions/checkout@v7
+      - run: >-
+          semgrep scan --metrics=off --error
+          --config p/python --config p/typescript --config p/secrets
+          --exclude tests --exclude evals
+          src frontend/src

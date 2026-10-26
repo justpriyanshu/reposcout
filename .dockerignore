@@ -5,3 +5,11 @@
 *.egg-info
 .pytest_cache
 .ruff_cache
+frontend/node_modules
+frontend/.tmp
+frontend/dist
+frontend/coverage
+frontend/test-results
+frontend/playwright-report
+src/reposcout/static/dist
+eval-runs

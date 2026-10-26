@@ -2,7 +2,8 @@ name: RepoScout review
 
 # Reviews every pull request and posts the result as PR comments.
 # Optional: add a repository secret REPOSCOUT_OPENAI_API_KEY (any OpenAI-compatible API,
-# e.g. a free Groq key) to enable LLM review. Without it, the rules-only review runs.
+# e.g. a free Groq key) to enable LLM review. Without it, the rules-only review runs
+# (the 16 built-in rules plus Bandit and gitleaks).
 # Repository variables REPOSCOUT_OPENAI_BASE_URL and REPOSCOUT_LLM_MODEL override the defaults.
 
 on:
@@ -22,11 +23,16 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           python-version: "3.12"
-      - run: pip install .
+      - name: Install RepoScout with the Bandit and gitleaks scanners
+        run: |
+          uv venv && echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          uv pip install ".[scanners]"
+          .venv/bin/python deploy/fetch_gitleaks.py 8.30.1 "$RUNNER_TEMP/gitleaks"
+          echo "REPOSCOUT_GITLEAKS_BIN=$RUNNER_TEMP/gitleaks" >> "$GITHUB_ENV"
       - name: Index the repository for cross-file context
         run: reposcout index --embed-provider hash
       - name: Review the pull request
@@ -36,6 +42,12 @@ jobs:
           REPOSCOUT_OPENAI_API_KEY: ${{ secrets.REPOSCOUT_OPENAI_API_KEY }}
           REPOSCOUT_OPENAI_BASE_URL: ${{ vars.REPOSCOUT_OPENAI_BASE_URL || 'https://api.groq.com/openai/v1' }}
           REPOSCOUT_LLM_MODEL: ${{ vars.REPOSCOUT_LLM_MODEL || 'llama-3.3-70b-versatile' }}
+          # Optional backup models, e.g. "gemini:gemini-2.5-flash,openrouter:qwen/qwen3-coder:free",
+          # with their keys as secrets.
+          REPOSCOUT_LLM_FALLBACKS: ${{ vars.REPOSCOUT_LLM_FALLBACKS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           PR_REF: ${{ github.repository }}#${{ github.event.pull_request.number }}
         run: |
           MODE=""
