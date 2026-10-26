@@ -50,7 +50,23 @@ With it, search understands meaning:
 Changing the embedder later means existing indexes are rebuilt the next time each repository
 is refreshed.
 
-## 3. Create the Render web service
+## 3. Optional: "Sign in with GitHub"
+
+Visitors can use the app without an account (each browser gets its own private list). To let
+them sign in with GitHub, so their list follows them across devices and they can pick from
+their own public repositories:
+
+1. github.com → **Settings → Developer settings → OAuth Apps → New OAuth App** (free).
+2. **Homepage URL:** your Render URL, e.g. `https://reposcout.onrender.com`.
+   **Authorization callback URL:** the same plus `/auth/github/callback`.
+3. Create a client secret, and set `REPOSCOUT_GITHUB_CLIENT_ID`, `REPOSCOUT_GITHUB_CLIENT_SECRET`
+   and `REPOSCOUT_PUBLIC_URL` (the Render URL) on the service.
+
+The app asks GitHub for no permissions (public profile only), uses the GitHub token once to
+learn who signed in, and doesn't keep it. Sessions are stored in Postgres, so sign-ins survive
+restarts too.
+
+## 4. Create the Render web service
 
 Render dashboard → **New → Web Service** → connect the GitHub repository →
 
@@ -67,6 +83,8 @@ Render dashboard → **New → Web Service** → connect the GitHub repository �
 | `REPOSCOUT_RERANK_PROVIDER` | `jina` (optional) |
 | `GITHUB_TOKEN` | optional: a fine-grained token with public read access raises GitHub's limit from 60 to 5,000 requests/hour |
 | `SENTRY_DSN` | optional, from a free Sentry project |
+| `REPOSCOUT_GITHUB_CLIENT_ID`, `REPOSCOUT_GITHUB_CLIENT_SECRET` | optional, for "Sign in with GitHub" (step 3) |
+| `REPOSCOUT_PUBLIC_URL` | your Render URL, e.g. `https://reposcout.onrender.com` (sign-in callback; also turns on Secure cookies) |
 
 The image builds the web UI, installs the dependencies with uv, and includes the tree-sitter
 grammars and gitleaks, so nothing is downloaded at run time.
@@ -74,7 +92,7 @@ grammars and gitleaks, so nothing is downloaded at run time.
 > `render.yaml` in this repository describes a different service: the single-repository app
 > (`reposcout serve`) for one repository you choose. Use the steps above for the public app.
 
-## 4. Check it
+## 5. Check it
 
 Open the service URL: the home page should load, adding a small public repository should show
 indexing progress, and after a redeploy (Manual Deploy → Deploy latest commit) the repository
@@ -94,3 +112,18 @@ All are environment variables; the defaults suit the free plan.
 | `REPOSCOUT_RATE_LIMIT_STORAGE` | `memory://` | `redis://host:6379` shares rate limits across several instances (needs `pip install redis`) |
 | `REPOSCOUT_TRACE_PUBLIC` | off | Record visitors' LLM calls in Langfuse (needs `LANGFUSE_*` keys; prompts contain their questions) |
 | `REPOSCOUT_SCANNERS` | `bandit,gitleaks` | Static analysers used in reviews |
+| `REPOSCOUT_GITHUB_CLIENT_ID` / `_SECRET` | | GitHub OAuth App for optional sign-in |
+| `REPOSCOUT_PUBLIC_URL` | taken from the request | Public address, for the sign-in callback |
+| `REPOSCOUT_COOKIE_SECURE` | on when `PUBLIC_URL` is https | Send cookies over HTTPS only |
+| `REPOSCOUT_SESSION_DAYS` | `30` | How long a sign-in lasts |
+
+## Privacy: what each person sees
+
+Each person has a private list of the repositories they added: signed-in people under their
+GitHub account, everyone else under an anonymous cookie in their browser. Listing, status,
+search, questions and the repository context used in reviews only work for repositories in
+your own list, so nobody can see or probe what others explored. Indexes themselves are shared
+behind the scenes (one per public repository) to save storage, so a repository someone else
+indexed is ready instantly when you add it. Chat history, saved reviews and your Groq key stay
+in your browser. The queue position ("number 3 in line") is the only sign that others are using
+the server.

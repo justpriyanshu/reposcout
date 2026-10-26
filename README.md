@@ -32,7 +32,7 @@ Reviewed 1 file(s) (+4/-0): 1 major.
 | **Search** | Hybrid code search: keyword (BM25) and semantic (embeddings) results fused into one ranking. |
 | **Review** | Reviews a diff (your working tree, a branch, a diff file, or a GitHub PR) with fast deterministic rules plus an LLM that sees related code from the rest of the repo. |
 | **PR bot** | Posts the review as inline comments on GitHub, from the CLI, a GitHub Action, or a webhook server. |
-| **Web UI + API** | A small web page and a JSON API for all of the above. |
+| **Web UI + API** | A small web page and a JSON API for all of the above. The public version has optional **Sign in with GitHub**, and each person sees only their own repositories. |
 | **Evals** | Built-in evaluation harness with labelled datasets, so quality changes are measured, not guessed. |
 
 ## Engineering highlights

@@ -219,7 +219,8 @@ Sticky top bar, 60 px, translucent background with blur, bottom border:
    two under 960 px, one under 720 px). The three live tools appear here too, as on imagestool.
 5. **Two columns** (one on phones): "Private by design" with three check-marked lines (the key stays
    in the browser; answers link to the exact lines; Find code needs no key), and "Recently explored",
-   today's public list from `GET /api/repos` as rows (name in mono, description or progress, and a
+   today's public list from `GET /api/repos` as rows (superseded on 2026-10-26: it is now "Your
+   repositories", only the caller's own list; see docs/DEPLOY-RENDER.md "Privacy") (name in mono, description or progress, and a
    Ready / Indexing / Failed pill), linking to `#/ask/{owner}/{name}`. States: a skeleton of 3 rows
    while loading; "Nothing explored yet. Open Ask or Find code and add a repository, for example
    pallets/flask; it will show up here for everyone." when empty; an error block with "Try again" on failure.
