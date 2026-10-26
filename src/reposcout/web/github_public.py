@@ -63,6 +63,11 @@ class PublicGitHub:
     def repo(self, repo: RepoId) -> dict:
         return self._get(f"/repos/{repo.owner}/{repo.name}").json()
 
+    def user_repos(self, login: str) -> list[dict]:
+        """A user's own public repositories, most recently pushed first (up to 100)."""
+        resp = self._get(f"/users/{quote(login)}/repos?type=owner&sort=pushed&per_page=100")
+        return [r for r in resp.json() if not r.get("private")]
+
     def pull(self, repo: RepoId, number: int) -> dict:
         return self._get(f"/repos/{repo.owner}/{repo.name}/pulls/{number}").json()
 
