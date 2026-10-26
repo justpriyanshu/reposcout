@@ -129,7 +129,17 @@ def make_assistant(indexed):
     return build
 
 
-PG_TABLES = ("rs_refs", "rs_chunks", "rs_files", "rs_meta", "rs_indexes", "repos")
+PG_TABLES = (
+    "rs_refs",
+    "rs_chunks",
+    "rs_files",
+    "rs_meta",
+    "rs_indexes",
+    "repos",
+    "users",
+    "sessions",
+    "user_repos",
+)
 
 
 @pytest.fixture

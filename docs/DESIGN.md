@@ -69,13 +69,19 @@ Every drop is counted (`dropped_invalid`, `dropped_off_diff`, `snapped_lines`, `
 
 **Failure isolation.** If the model call fails for a file, that file still gets its rule findings. A single unreadable file never aborts indexing, but a provider outage stops it immediately instead of failing every file one by one.
 
-## 6. GitHub integration
+## 6. People and privacy in the public app
+
+**Private lists over shared indexes.** Each person has a list of the repositories they added (`user_repos`), keyed by `gh:<GitHub id>` when signed in or `anon:<random id>` from an HttpOnly cookie otherwise; signing in merges the browser's list into the account. Every repository endpoint (status, search, ask, and the repository context used in reviews) checks the caller's list first, so nobody can see or probe what others explored. The index itself stays shared: one per public repository, because copying it per person would multiply storage in a 0.5 GB free database for no privacy gain on public code. An index evicted to save space shows as "expired" in the lists that still have it.
+
+**GitHub sign-in without keeping tokens.** OAuth web flow with `state` and PKCE, no scopes. The access token is used once to read the profile and then dropped, so a database leak exposes no credential that can act on anyone's GitHub account; "your repositories" are read from the public API by login. Sessions are random tokens whose SHA-256 is stored; cookies are HttpOnly and SameSite=Lax, and POST/DELETE requests from another site's Origin are refused. The app sets its own CSP and security headers, because on Render no proxy adds them.
+
+## 7. GitHub integration
 
 **Posting.** One review per run, with up to 30 inline comments on the new-file side and the rest listed in the summary. If GitHub rejects the review because a position is invalid (HTTP 422), it is re-posted as a summary-only review, so feedback is never lost.
 
 **Webhooks.** The raw body is verified with HMAC-SHA256 against `X-Hub-Signature-256` using a constant-time comparison. Only `pull_request` events with actions `opened`, `synchronize`, `reopened` and `ready_for_review` on non-draft PRs trigger a review. The handler returns `202 Accepted` immediately and reviews in a background task, because GitHub times out slow webhook deliveries. GitHub can deliver the same event more than once, so the server remembers `repo#pr@head_sha` keys (bounded to the last 1,000) and ignores repeats: a commit is reviewed exactly once.
 
-## 7. Reliability details
+## 8. Reliability details
 
 - HTTP clients retry 429 and 5xx responses with exponential backoff and honour `Retry-After`.
 - Free LLM tiers change their limits often, so `REPOSCOUT_LLM_FALLBACKS` chains providers (Groq → Gemini → OpenRouter...). With fallbacks configured, each model gives up after two quick attempts instead of waiting out a rate limit, and the next one answers. It is a small wrapper rather than LiteLLM, whose size matters on a 512 MB server; all these providers speak the OpenAI API anyway.
@@ -85,7 +91,7 @@ Every drop is counted (`dropped_invalid`, `dropped_off_diff`, `snapped_lines`, `
 - Per-route request counts, error counts and p50/p95 latency at `/stats`, plus LLM token usage.
 - The CLI's `--fail-on major` exit code lets the review act as a CI gate.
 
-## 8. Evaluation
+## 9. Evaluation
 
 Changing a prompt, a chunk size or a ranking weight can quietly make things worse, so the project ships labelled datasets and metrics:
 
@@ -94,7 +100,7 @@ Changing a prompt, a chunk size or a ranking weight can quietly make things wors
 
 The eval datasets are excluded from the index (`.reposcoutignore`), because they contain the test questions word for word and would leak the answers.
 
-## 9. Likely interview questions
+## 10. Likely interview questions
 
 **Why not just send the whole repository to the LLM?** Most repositories do not fit in a context window, cost grows with every token, and models answer worse when the relevant code is buried in irrelevant code. Retrieval sends only the few chunks that matter.
 

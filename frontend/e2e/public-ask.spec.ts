@@ -135,6 +135,6 @@ test("old links redirect and unknown routes go home", async ({ page }) => {
   await expect(page).toHaveTitle("Find code · o/n · RepoScout");
   await expect(page.locator(".navlink.direct[aria-current=page]")).toHaveText("Find code");
   await page.goto("/static/app.html#/nowhere");
-  await expect(page.getByRole("heading", { name: "Nothing explored yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nothing here yet" })).toBeVisible();
   api.verify();
 });

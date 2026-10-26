@@ -242,3 +242,18 @@ def test_webhook_ignores_drafts_and_other_events(app_parts):
     assert webhook(client, secret, "pull_request", closed).json()["status"] == "ignored"
     assert webhook(client, secret, "issues", {}).json()["status"] == "ignored"
     assert gh.posted == []
+
+
+def test_whoami_reports_the_posting_account():
+    import httpx
+
+    from reposcout.github import GitHubClient
+
+    def handler(request):
+        if request.headers["authorization"] == "Bearer good":
+            return httpx.Response(200, json={"login": "octocat"})
+        return httpx.Response(403, json={"message": "Resource not accessible by integration"})
+
+    transport = httpx.MockTransport(handler)
+    assert GitHubClient("good", client=httpx.Client(transport=transport)).whoami() == "octocat"
+    assert GitHubClient("actions", client=httpx.Client(transport=transport)).whoami() is None

@@ -6,16 +6,19 @@ Visitors bring their own LLM API key. The key is sent with each request in the
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import ipaddress
 import logging
 import re
 import time
 from threading import Lock
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from .. import __version__, static_files
@@ -27,6 +30,19 @@ from ..observability import TracedLLM, langfuse_client
 from ..rerank import Reranker
 from ..review import Reviewer, Severity
 from ..review.scanners import make_scanners
+from .accounts import (
+    OAUTH_COOKIE,
+    OAUTH_COOKIE_SECONDS,
+    SESSION_COOKIE,
+    VISITOR_COOKIE,
+    VISITOR_COOKIE_DAYS,
+    AuthError,
+    GitHubOAuth,
+    Owner,
+    new_visitor_id,
+    pkce_pair,
+    safe_next,
+)
 from .config import PublicSettings
 from .github_public import GitHubAPIError, PublicGitHub
 from .limits import Busy, ConcurrencyLimit, RateLimiter
@@ -38,6 +54,20 @@ log = logging.getLogger("reposcout.web")
 MODEL_RE = re.compile(r"^[A-Za-z0-9._:/-]{1,100}$")
 NOT_CHAT_MODELS = re.compile(r"whisper|guard|tts|orpheus|playai|distil|embed|allam", re.I)
 MAX_BODY_BYTES = 64 * 1024
+VISITOR_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+# Served with every page and API response (on hosts like Render there's no proxy adding them).
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+GITHUB_REPOS_TTL = 300
 # Visitors' requests give up on a busy provider quickly instead of holding a server thread.
 PUBLIC_RETRY_ATTEMPTS = 3
 PUBLIC_MAX_RETRY_WAIT = 10.0
@@ -147,6 +177,7 @@ def create_public_app(
     reranker: Reranker | None = None,
 ) -> FastAPI:
     app = FastAPI(title="RepoScout", version=__version__, docs_url="/api/docs", redoc_url=None)
+    app.state.public_url = settings.public_url
     app.add_middleware(BodySizeLimit, max_bytes=MAX_BODY_BYTES)
     http = http or httpx.Client(timeout=settings.request_timeout)
     store = settings.rate_limit_storage
@@ -156,6 +187,13 @@ def create_public_app(
     llm_slots = ConcurrencyLimit(settings.max_concurrent_llm, per_key=1)
     search_slots = ConcurrencyLimit(settings.max_concurrent_search, per_key=2)
     scanners = make_scanners()
+    accounts = workspace.accounts
+    oauth = (
+        GitHubOAuth(settings.github_client_id, settings.github_client_secret, http)
+        if settings.github_client_id and settings.github_client_secret
+        else None
+    )
+    github_repos_cache: dict[str, tuple[float, list[dict]]] = {}
     key_cache: dict[str, float] = {}
     key_lock = Lock()
 
@@ -169,6 +207,54 @@ def create_public_app(
             if real:
                 return visitor_key(real)
         return visitor_key(request.client.host) if request.client else "unknown"
+
+    def owner_of(request: Request) -> Owner:
+        """The signed-in GitHub user, or this browser's anonymous id (created on first use;
+        the middleware below sets its cookie)."""
+        found = accounts.session_user(request.cookies.get(SESSION_COOKIE))
+        if found is not None:
+            return Owner(found[0], found[1])
+        visitor = request.cookies.get(VISITOR_COOKIE, "")
+        if not VISITOR_RE.match(visitor):
+            visitor = getattr(request.state, "new_visitor", None) or new_visitor_id()
+            request.state.new_visitor = visitor
+        return Owner(f"anon:{visitor}")
+
+    def set_cookie(response: Response, name: str, value: str, max_age: int) -> None:
+        response.set_cookie(
+            name,
+            value,
+            max_age=max_age,
+            httponly=True,
+            samesite="lax",
+            secure=settings.cookie_secure,
+            path="/",
+        )
+
+    def base_url(request: Request) -> str:
+        return settings.public_url or str(request.base_url).rstrip("/")
+
+    def mine(who: Owner, repo: RepoId) -> bool:
+        return accounts.has(who.key, repo.key)
+
+    def record_for(entry: dict) -> dict:
+        """A list entry's current record, or an "expired" stub if the server dropped the
+        index to save space (the person can index it again)."""
+        record = workspace.get(RepoId(entry["owner"], entry["name"]))
+        if record is not None:
+            return record
+        full_name = f"{entry['owner']}/{entry['name']}"
+        return {
+            "key": entry["repo_key"],
+            "owner": entry["owner"],
+            "name": entry["name"],
+            "full_name": full_name,
+            "status": "expired",
+            "stage": "Removed to save space",
+            "ready": False,
+            "error": "",
+            "queue_position": 0,
+        }
 
     class _Slot:
         def __init__(self, limit_: ConcurrencyLimit, request: Request):
@@ -250,15 +336,17 @@ def create_public_app(
             if len(key_cache) > 5000:
                 key_cache.clear()
 
-    def ready_repo(owner: str, name: str) -> tuple[RepoId, dict, RepoAssistant]:
+    def ready_repo(owner: str, name: str, who: Owner) -> tuple[RepoId, dict, RepoAssistant]:
         repo = RepoId(owner, name)
-        record = workspace.get(repo)
+        # Only repositories in your own list are visible to you.
+        record = workspace.get(repo) if mine(who, repo) else None
         if record is None:
             raise ApiError(404, "not_indexed", "This repository hasn't been added yet.")
         store = workspace.store(repo)
         if not record["ready"] or store is None:
             raise ApiError(409, "not_ready", "This repository is still being indexed.")
         workspace.touch(repo)
+        accounts.touch(who.key, repo.key)
         repo = RepoId(record["owner"], record["name"])
         assistant = RepoAssistant(
             store,
@@ -313,6 +401,115 @@ def create_public_app(
     async def repo_error(request: Request, exc: RepoScoutError):
         return JSONResponse({"error": str(exc), "code": "bad_request"}, 400)
 
+    # ------------------------------------------------------------------ middleware
+
+    @app.middleware("http")
+    async def people_and_headers(request: Request, call_next):
+        # Cookie-based sessions: refuse state-changing requests sent from other sites.
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("origin")
+            if origin and urlparse(origin).netloc not in _own_hosts(request):
+                return JSONResponse({"error": "Cross-site request refused.", "code": "bad_origin"}, 403)
+        response = await call_next(request)
+        visitor = getattr(request.state, "new_visitor", None)
+        if visitor:
+            set_cookie(response, VISITOR_COOKIE, visitor, VISITOR_COOKIE_DAYS * 86400)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        if not request.url.path.startswith(("/api/docs", "/openapi.json")):
+            response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+        return response
+
+    # ------------------------------------------------------------------ people
+
+    @app.get("/api/me")
+    def me(request: Request) -> dict:
+        return {"user": owner_of(request).user, "github_login": oauth is not None}
+
+    @app.post("/api/logout")
+    def logout(request: Request) -> Response:
+        accounts.end_session(request.cookies.get(SESSION_COOKIE))
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(SESSION_COOKIE, path="/")
+        response.delete_cookie(VISITOR_COOKIE, path="/")  # start a fresh anonymous list
+        return response
+
+    @app.get("/auth/github/login", include_in_schema=False)
+    def github_login(request: Request, next: str = "/") -> Response:
+        if oauth is None:
+            raise ApiError(404, "no_github_login", "Sign-in with GitHub isn't set up on this server.")
+        limit(index_limiter, request, "sign-in attempts")
+        state = new_visitor_id() + new_visitor_id()
+        verifier, challenge = pkce_pair()
+        target = safe_next(next)
+        response = RedirectResponse(
+            oauth.authorize_url(f"{base_url(request)}/auth/github/callback", state, challenge), 302
+        )
+        set_cookie(response, OAUTH_COOKIE, f"{state}.{verifier}.{_b64(target)}", OAUTH_COOKIE_SECONDS)
+        return response
+
+    @app.get("/auth/github/callback", include_in_schema=False)
+    def github_callback(request: Request, code: str = "", state: str = "", error: str = "") -> Response:
+        stored = request.cookies.get(OAUTH_COOKIE, "")
+        parts = stored.split(".")
+
+        def fail(message: str) -> Response:
+            response = RedirectResponse("/?" + urlencode({"login_error": message}), 302)
+            response.delete_cookie(OAUTH_COOKIE, path="/")
+            return response
+
+        if oauth is None:
+            return fail("Sign-in with GitHub isn't set up on this server.")
+        if error:
+            return fail(
+                "Sign-in was cancelled." if error == "access_denied" else "GitHub couldn't sign you in."
+            )
+        if len(parts) != 3 or not code or not hmac.compare_digest(parts[0], state):
+            return fail("That sign-in link has expired. Please try again.")
+        try:
+            profile = oauth.user_for_code(code, parts[1], f"{base_url(request)}/auth/github/callback")
+        except AuthError as exc:
+            return fail(str(exc))
+        token = accounts.create_session(profile)
+        visitor = request.cookies.get(VISITOR_COOKIE, "")
+        if VISITOR_RE.match(visitor):
+            accounts.merge(f"anon:{visitor}", f"gh:{int(profile['id'])}")
+        response = RedirectResponse(safe_next(_unb64(parts[2])), 302)
+        set_cookie(response, SESSION_COOKIE, token, settings.session_days * 86400)
+        response.delete_cookie(OAUTH_COOKIE, path="/")
+        return response
+
+    @app.get("/api/me/github-repos")
+    def my_github_repos(request: Request) -> dict:
+        who = owner_of(request)
+        if who.user is None:
+            raise ApiError(401, "sign_in", "Sign in with GitHub to see your repositories.")
+        login = who.user["login"]
+        cached = github_repos_cache.get(login)
+        if cached and cached[0] > time.time():
+            return {"repos": cached[1]}
+        limit(search_limiter, request, "requests")
+        try:
+            found = github.user_repos(login)
+        except GitHubAPIError as exc:
+            raise ApiError(502, "github_error", str(exc)) from exc
+        repos = [
+            {
+                "full_name": r.get("full_name", ""),
+                "description": (r.get("description") or "")[:300],
+                "language": r.get("language") or "",
+                "stars": int(r.get("stargazers_count") or 0),
+                "pushed_at": r.get("pushed_at") or "",
+                "html_url": r.get("html_url") or "",
+                "fork": bool(r.get("fork")),
+            }
+            for r in found
+        ]
+        github_repos_cache[login] = (time.time() + GITHUB_REPOS_TTL, repos)
+        if len(github_repos_cache) > 2000:
+            github_repos_cache.clear()
+        return {"repos": repos}
+
     # ------------------------------------------------------------------ pages
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -354,8 +551,10 @@ def create_public_app(
     # ------------------------------------------------------------------ repositories
 
     @app.get("/api/repos")
-    def repos() -> dict:
-        return {"repos": workspace.list()}
+    def repos(request: Request) -> dict:
+        """Only the caller's own repositories, most recently used first."""
+        who = owner_of(request)
+        return {"repos": [record_for(e) for e in accounts.entries(who.key)]}
 
     @app.post("/api/repos", status_code=202)
     def add_repo(req: LinkRequest, request: Request) -> dict:
@@ -369,19 +568,28 @@ def create_public_app(
             record = workspace.submit(link.repo, force=req.refresh, requested_by=client_ip(request))
         except QueueFullError as exc:
             raise ApiError(429, "queue_full", str(exc), 60) from exc
+        accounts.link(owner_of(request).key, link.repo.key, record["owner"], record["name"])
         return {"repo": record, "link": {"kind": link.kind, "pull": link.pull}}
 
     @app.get("/api/repos/{owner}/{name}")
-    def repo_status(owner: str, name: str) -> dict:
-        record = workspace.get(RepoId(owner, name))
-        if record is None:
+    def repo_status(owner: str, name: str, request: Request) -> dict:
+        repo = RepoId(owner, name)
+        who = owner_of(request)
+        entry = next((e for e in accounts.entries(who.key, 1000) if e["repo_key"] == repo.key), None)
+        if entry is None:
             raise ApiError(404, "not_indexed", "This repository hasn't been added yet.")
-        return {"repo": record}
+        return {"repo": record_for(entry)}
+
+    @app.delete("/api/repos/{owner}/{name}")
+    def forget_repo(owner: str, name: str, request: Request) -> dict:
+        """Remove a repository from your own list (the shared index stays for others)."""
+        accounts.unlink(owner_of(request).key, RepoId(owner, name).key)
+        return {"ok": True}
 
     @app.post("/api/repos/{owner}/{name}/search")
     def search(owner: str, name: str, req: SearchRequest, request: Request) -> dict:
         limit(search_limiter, request, "searches")
-        repo, record, assistant = ready_repo(owner, name)
+        repo, record, assistant = ready_repo(owner, name, owner_of(request))
         with _Slot(search_slots, request):
             results = assistant.search(req.query, k=10)
         return {
@@ -404,7 +612,7 @@ def create_public_app(
     def ask(owner: str, name: str, req: AskRequest, request: Request) -> dict:
         llm = user_llm(request)
         limit(llm_limiter, request, "questions and reviews")
-        repo, record, assistant = ready_repo(owner, name)
+        repo, record, assistant = ready_repo(owner, name, owner_of(request))
         assistant.llm = llm
         with _Slot(llm_slots, request):
             answer = assistant.ask(req.question, history=[t.model_dump() for t in req.history])
@@ -429,9 +637,9 @@ def create_public_app(
         llm = user_llm(request)
         limit(llm_limiter, request, "questions and reviews")
         with _Slot(llm_slots, request):
-            return run_review(req, link, llm)
+            return run_review(req, link, llm, owner_of(request))
 
-    def run_review(req: ReviewRequest, link, llm: OpenAICompatibleLLM | TracedLLM) -> dict:
+    def run_review(req: ReviewRequest, link, llm: OpenAICompatibleLLM | TracedLLM, who: Owner) -> dict:
         check_key(llm)
         try:
             pr = github.pull(link.repo, link.pull)
@@ -462,8 +670,9 @@ def create_public_app(
         owner, _, name = full_name.partition("/")
         repo = RepoId(owner, name)
         context = None
-        record = workspace.get(repo)
-        store = workspace.store(repo)
+        # Repository context only from your own list (otherwise it would reveal what others indexed).
+        record = workspace.get(repo) if mine(who, repo) else None
+        store = workspace.store(repo) if record else None
         if record and record["ready"] and store is not None:
             context = RepoAssistant(
                 store,
@@ -506,6 +715,27 @@ def create_public_app(
         return data
 
     return app
+
+
+def _own_hosts(request: Request) -> set[str]:
+    """Host names this app is reached at. Only hosts are compared: behind a proxy the app
+    may see http while the browser used https."""
+    hosts = {request.headers.get("host", "")}
+    public = request.app.state.public_url if hasattr(request.app.state, "public_url") else ""
+    if public:
+        hosts.add(urlparse(public).netloc)
+    return hosts
+
+
+def _b64(text: str) -> str:
+    return base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
+
+
+def _unb64(text: str) -> str:
+    try:
+        return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)).decode()
+    except (ValueError, UnicodeDecodeError):
+        return "/"
 
 
 def build_public_app(settings: PublicSettings | None = None, embedder: Embedder | None = None) -> FastAPI:

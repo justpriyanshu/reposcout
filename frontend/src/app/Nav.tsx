@@ -1,9 +1,10 @@
-// The top bar (spec §6.2): All tools menu, direct tool links, key status and theme.
+// The top bar (spec §6.2): All tools menu, direct tool links, key status, theme, and the account (sign in with GitHub).
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Icon, LogoMark, ToolIcon } from "@/components/Icon";
 import { ThemeButton } from "@/components/ThemeButton";
 import { Button } from "@/components/ui/button";
 import { CATEGORIES, TOOLS } from "@/lib/tools";
+import { Account } from "./Account";
 import { openKeyDialog, useConfig, useSavedKey } from "./settings";
 
 const DIRECT = [["ask", "Ask"], ["find", "Find code"], ["review", "Review a PR"]] as const;
@@ -104,6 +105,7 @@ export function Nav({ currentTool }: { currentTool: string | null }) {
           <span className={hasKey ? "dot" : "dot off"} id="keyDot" /><span className="lbl" id="keyLabel">{hasKey ? `${config.provider} key` : "Add API key"}</span>
         </Button>
         <ThemeButton />
+        <Account />
       </div>
     </div></header>
   );

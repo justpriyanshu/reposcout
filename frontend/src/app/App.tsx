@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { legacyRedirect, parseRoute, type Route } from "@/lib/routes";
 import { tool } from "@/lib/tools";
+import { showLoginError, useMe } from "./account";
 import { KeyDialog } from "./KeyDialog";
 import { Nav } from "./Nav";
 import { useConfig } from "./settings";
@@ -13,9 +14,11 @@ const Home = lazy(() => import("./views/Home"));
 const Ask = lazy(() => import("./views/Ask"));
 const Find = lazy(() => import("./views/Find"));
 const Review = lazy(() => import("./views/Review"));
+const GitHub = lazy(() => import("./views/GitHub"));
 
 function titleFor(route: Route): string {
   if (route.view === "home") return "RepoScout: free tools for GitHub repositories";
+  if (route.view === "github") return "Your GitHub repositories · RepoScout";
   const name = tool(route.tool)!.name;
   if (route.tool === "review" && route.pull) return `Review #${route.pull} · ${route.owner}/${route.name} · RepoScout`;
   return route.owner ? `${name} · ${route.owner}/${route.name} · RepoScout` : `${name} · RepoScout`;
@@ -50,6 +53,7 @@ function Busy() {
 
 function View({ route }: { route: Route }) {
   if (route.view === "home") return <Home />;
+  if (route.view === "github") return <GitHub />;
   if (!route.owner || !route.name) {
     const Tool = route.tool === "ask" ? Ask : route.tool === "find" ? Find : Review;
     return <Tool route={{ tool: route.tool }} />;
@@ -79,6 +83,8 @@ function useHashNav() {
 
 export function App() {
   useConfig(); // load the provider name and key link early
+  useMe(); // and who is signed in
+  useEffect(() => { showLoginError(); }, []); // after <Toaster /> has mounted (child effects run first)
   const { hash, count } = useHashNav();
   const route = parseRoute(hash);
 

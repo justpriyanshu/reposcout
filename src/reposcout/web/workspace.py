@@ -35,6 +35,7 @@ from ..embeddings import Embedder
 from ..errors import ProviderError, RepoScoutError
 from ..indexer import Indexer, iter_repo_files
 from ..store import BaseStore, IndexStore
+from .accounts import Accounts
 from .config import PublicSettings
 from .github_public import GitHubAPIError, PublicGitHub
 from .links import RepoId
@@ -452,6 +453,10 @@ class Workspace:
             self.indexes = FileIndexes(self.index_dir)
             self._latest = "MAX"  # SQLite's two-argument MAX is Postgres's GREATEST
         self._stores: OrderedDict[str, BaseStore] = OrderedDict()
+        # Who added which repository (each person's private list) and sign-in sessions.
+        self.accounts = Accounts(
+            self._db, self._lock, postgres=db is not None, session_days=settings.session_days
+        )
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker: threading.Thread | None = None
         self._stopping = threading.Event()

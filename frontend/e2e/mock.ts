@@ -19,8 +19,17 @@ export interface Mock {
 // Paths the two pages call (the public JSON API, and the local server's endpoints).
 const API = /^\/(api\/|stats$|ask$|review$|reviews$|search$|health$)/;
 
+// The app asks who is signed in on every page. Unless a test says otherwise: nobody, and the server
+// offers no GitHub sign-in (the app then looks exactly as it did before accounts).
+export const NO_SIGN_IN = { user: null, github_login: false };
+export const SIGNED_OUT = { user: null, github_login: true };
+// A data: avatar, so no test ever fetches from GitHub.
+export const AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%236447E8'/%3E%3C/svg%3E";
+export const USER = { login: "octocat", name: "The Octocat", avatar_url: AVATAR, html_url: "https://github.com/octocat" };
+export const SIGNED_IN = { user: USER, github_login: true };
+
 export async function mockApi(page: Page): Promise<Mock> {
-  const handlers = new Map<string, Handler | Reply>();
+  const handlers = new Map<string, Handler | Reply>([["GET /api/me", { json: NO_SIGN_IN }]]);
   const seen: { route: string; req: Request }[] = [];
   const unhandled: string[] = [];
   await page.route((url) => API.test(url.pathname), async (route) => {

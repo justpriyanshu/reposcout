@@ -51,6 +51,19 @@ class PublicSettings:
         default_factory=lambda: os.environ.get("GITHUB_API_URL", "https://api.github.com")
     )
 
+    # Optional "Sign in with GitHub": a GitHub OAuth App's client ID and secret (create one
+    # at github.com/settings/developers; callback URL <public_url>/auth/github/callback).
+    github_client_id: str = field(default_factory=lambda: _env("GITHUB_CLIENT_ID", ""))
+    github_client_secret: str = field(default_factory=lambda: _env("GITHUB_CLIENT_SECRET", ""))
+    # The address people use to reach the app, e.g. https://reposcout.onrender.com. Used for
+    # the sign-in callback; when empty it is taken from each request.
+    public_url: str = field(default_factory=lambda: _env("PUBLIC_URL", "").rstrip("/"))
+    # Mark cookies Secure (HTTPS only). Defaults to on when public_url is https.
+    cookie_secure: bool = field(
+        default_factory=lambda: _env_bool("COOKIE_SECURE", _env("PUBLIC_URL", "").startswith("https://"))
+    )
+    session_days: int = field(default_factory=lambda: _env_int("SESSION_DAYS", 30))
+
     # Limits that keep a small server healthy.
     max_repo_mb: int = field(default_factory=lambda: _env_int("MAX_REPO_MB", 80))
     max_files: int = field(default_factory=lambda: _env_int("MAX_FILES", 3000))
