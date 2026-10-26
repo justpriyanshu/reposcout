@@ -19,6 +19,7 @@ from ..store import SearchResult
 from .diff import FileDiff, parse_unified_diff
 from .models import Finding, Severity
 from .rules import run_rules
+from .scanners import Scanner, SourceLoader, run_scanners
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ GENERATED_PATTERNS = re.compile(
     r"|_pb2\.py$|\.pb\.go$|\.generated\.\w+$",
 )
 CALL_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+DEF_RE = re.compile(r"\b(?:def|function|func|fn|fun|class)\s+([A-Za-z_][A-Za-z0-9_]*)")
+CODE_KINDS = {"function", "method", "class", "definition"}
 NOT_SYMBOLS = {
     "if",
     "for",
@@ -285,8 +288,10 @@ class Reviewer:
         max_diff_chars: int = 12_000,
         context_snippets: int = 3,
         workers: int = 4,
+        scanners: list[Scanner] | None = None,
     ):
         self.llm = llm
+        self.scanners = scanners or []
         self.assistant = assistant
         self.max_files = max_files
         self.max_findings_per_file = max_findings_per_file
@@ -297,10 +302,20 @@ class Reviewer:
 
     # ------------------------------------------------------------------ public
 
-    def review(self, diff_text: str, pr_title: str = "", pr_body: str = "") -> ReviewResult:
-        return self.review_files(parse_unified_diff(diff_text), pr_title, pr_body)
+    def review(
+        self, diff_text: str, pr_title: str = "", pr_body: str = "", load_source: SourceLoader | None = None
+    ) -> ReviewResult:
+        """``load_source(path)`` returns a changed file's new text; scanners that need whole
+        files (Bandit, Semgrep) use it. Without it only line-based checks run."""
+        return self.review_files(parse_unified_diff(diff_text), pr_title, pr_body, load_source)
 
-    def review_files(self, files: list[FileDiff], pr_title: str = "", pr_body: str = "") -> ReviewResult:
+    def review_files(
+        self,
+        files: list[FileDiff],
+        pr_title: str = "",
+        pr_body: str = "",
+        load_source: SourceLoader | None = None,
+    ) -> ReviewResult:
         started = time.perf_counter()
         result = ReviewResult(findings=[], llm_used=self.llm is not None)
         stats = result.stats
@@ -321,7 +336,7 @@ class Reviewer:
         def work(file: FileDiff) -> tuple[FileDiff, list[Finding], str, ReviewStats]:
             # Each worker counts into its own stats object; they are merged afterwards.
             local = ReviewStats()
-            findings = run_rules(file)
+            findings = run_rules(file) + run_scanners(self.scanners, file, load_source)
             local.rule_findings += len(findings)
             summary = ""
             if self.llm is not None and detect_language(file.path) not in SKIP_LLM_LANGUAGES:
@@ -382,6 +397,7 @@ class Reviewer:
             f"Diff (new-file line number, marker, code):\n```\n{diff_text}\n```"
         )
         system = REVIEW_SYSTEM_PROMPT.format(max_findings=self.max_findings_per_file)
+        assert self.llm is not None  # only called when a model is configured
         try:
             reply = self.llm.complete(system, "\n\n".join(parts), json_mode=True, temperature=0.0)
         except Exception as exc:  # keep the rule findings even if the model fails
@@ -422,36 +438,67 @@ class Reviewer:
         return findings, summary[:300]
 
     def _related_context(self, file: FileDiff) -> str:
-        """Pull definitions of functions the change calls, plus semantically similar code."""
+        """Context from the rest of the repository, in order of usefulness:
+
+        1. definitions of functions the change calls (their signatures and behaviour),
+        2. callers of functions the change modifies, from the symbol graph (a changed
+           signature or return value breaks them),
+        3. semantically similar code, to fill the remaining slots."""
         if self.assistant is None or self.context_snippets <= 0:
             return ""
-        added_text = "\n".join(content for _, content in file.added_lines())
+        store = self.assistant.store
+        added = file.added_lines()
+        added_text = "\n".join(content for _, content in added)
         symbols = [
             s for s in dict.fromkeys(CALL_RE.findall(added_text)) if s not in NOT_SYMBOLS and len(s) > 2
         ][:8]
-        picked: dict[int, SearchResult] = {}
+        picked: dict[int, tuple[SearchResult, str]] = {}
         try:
             for symbol in symbols:
-                for hit in self.assistant.store.find_symbol(symbol, limit=1):
+                for hit in store.find_symbol(symbol, limit=1):
                     if hit.path != file.path:
-                        picked.setdefault(hit.chunk_id, hit)
-                if len(picked) >= self.context_snippets:
-                    break
+                        picked.setdefault(hit.chunk_id, (hit, ""))
+                if len(picked) >= self.context_snippets - 1:
+                    break  # keep a slot for a caller
+            find_references = getattr(store, "find_references", None)
+            if find_references is not None:
+                for name in self._changed_definitions(file, added):
+                    for hit in find_references(name, limit=1, exclude_paths={file.path}):
+                        picked.setdefault(hit.chunk_id, (hit, f"calls {name}"))
+                    if len(picked) >= self.context_snippets:
+                        break
             if len(picked) < self.context_snippets:
                 stem = PurePosixPath(file.path).stem
                 query = f"{stem} {' '.join(symbols)} {added_text[:500]}"
                 for hit in self.assistant.search(query, k=self.context_snippets, exclude_paths={file.path}):
-                    picked.setdefault(hit.chunk_id, hit)
+                    picked.setdefault(hit.chunk_id, (hit, ""))
         except Exception as exc:  # context is a bonus; never fail the review over it
             log.warning("Context retrieval failed for %s: %s", file.path, exc)
             return ""
 
         blocks = []
-        for hit in list(picked.values())[: self.context_snippets]:
+        for hit, note in list(picked.values())[: self.context_snippets]:
             text = "\n".join(hit.text.splitlines()[:60])
             label = f"{hit.location}" + (f" ({hit.kind} {hit.name})" if hit.name else "")
+            if note:
+                label += f", {note}"
             blocks.append(f"{label}\n```{hit.language}\n{text}\n```")
         return "\n\n".join(blocks)
+
+    def _changed_definitions(self, file: FileDiff, added: list[tuple[int, str]]) -> list[str]:
+        """Names of functions/classes this diff defines or edits: definitions on added lines,
+        plus the indexed chunks the added lines fall into."""
+        names = [n for _, content in added for n in DEF_RE.findall(content)]
+        lines = [line for line, _ in added]
+        if lines and self.assistant is not None:
+            for chunk in self.assistant.store.chunks_overlapping(file.path, min(lines), max(lines)):
+                if (
+                    chunk.name
+                    and chunk.kind in CODE_KINDS
+                    and any(chunk.start_line <= n <= chunk.end_line for n in lines)
+                ):
+                    names.append(chunk.name.rsplit(".", 1)[-1])
+        return [n for n in dict.fromkeys(names) if n not in NOT_SYMBOLS and len(n) > 2][:6]
 
     def _finalise(self, findings: list[Finding], stats: ReviewStats) -> list[Finding]:
         """Drop low-severity noise, merge duplicates (rules win ties), cap per file.

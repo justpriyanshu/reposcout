@@ -179,8 +179,9 @@ def create_app(
     def reviews() -> dict:
         return {"reviews": list(recent_reviews)}
 
-    def run_pr_review(ref: PullRequestRef, head_sha: str, title: str, body: str) -> None:
-        record = {
+    def run_pr_review(ref: PullRequestRef, head_sha: str, title: str, body: str, head_repo: str = "") -> None:
+        assert github is not None  # the webhook refuses PRs without a GitHub client
+        record: dict[str, object] = {
             "pull_request": str(ref),
             "head_sha": head_sha[:12],
             "status": "running",
@@ -189,7 +190,8 @@ def create_app(
         recent_reviews.appendleft(record)
         try:
             diff = github.get_pull_request_diff(ref)
-            result = services.reviewer.review(diff, title, body or "")
+            loader = github.source_loader({"head": {"repo": {"full_name": head_repo}, "sha": head_sha}})
+            result = services.reviewer.review(diff, title, body or "", load_source=loader)
             github.post_review(ref, head_sha, result)
             record.update(status="posted", headline=result.headline(), latency_ms=result.stats.latency_ms)
         except Exception as exc:  # background task: record the failure instead of crashing
@@ -229,7 +231,10 @@ def create_app(
         while len(seen_deliveries) > 1000:
             seen_deliveries.popitem(last=False)
 
-        background.add_task(run_pr_review, ref, head_sha, pr.get("title", ""), pr.get("body") or "")
+        head_repo = ((pr.get("head") or {}).get("repo") or {}).get("full_name") or f"{ref.owner}/{ref.repo}"
+        background.add_task(
+            run_pr_review, ref, head_sha, pr.get("title", ""), pr.get("body") or "", head_repo
+        )
         return JSONResponse({"status": "queued", "pull_request": str(ref)}, status_code=202)
 
     return app

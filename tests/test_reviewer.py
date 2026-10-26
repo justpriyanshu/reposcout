@@ -201,3 +201,35 @@ def test_review_prompt_discourages_noise():
     assert "Only report problems this change introduces" in prompt
     assert "One finding per root cause" in prompt
     assert "missing type hints" in prompt
+
+
+def test_callers_of_a_changed_function_are_added(sample_repo, settings):
+    from reposcout.assistant import RepoAssistant
+    from reposcout.embeddings import HashingEmbedder
+    from reposcout.indexer import Indexer
+    from reposcout.store import IndexStore
+
+    (sample_repo / "api").mkdir()
+    (sample_repo / "api" / "login.py").write_text(
+        "from auth.session import verify_token\n\n\n"
+        "def login(request):\n"
+        "    if not verify_token(request.secret, request.token, request.sig):\n"
+        "        raise PermissionError\n"
+        "    return True\n"
+    )
+    store = IndexStore(settings.index_path)
+    embedder = HashingEmbedder()
+    Indexer(store, embedder).index(sample_repo)
+    diff = """diff --git a/auth/session.py b/auth/session.py
+--- a/auth/session.py
++++ b/auth/session.py
+@@ -5,3 +5,3 @@ import hmac
+ def verify_token(secret: str, token: str, signature: str) -> bool:
+     \"\"\"Check that a session token was signed with our secret.\"\"\"
+-    expected = hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest()
++    expected = hmac.new(secret.encode(), token.encode(), hashlib.md5).hexdigest()
+"""
+    llm = FakeLLM(findings_reply([]))
+    Reviewer(llm, RepoAssistant(store, embedder, None)).review(diff)
+    prompt = llm.calls[0][1]
+    assert "api/login.py" in prompt and "calls verify_token" in prompt
