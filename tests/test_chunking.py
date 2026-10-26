@@ -1,4 +1,17 @@
+import pytest
+
+from reposcout import treesitter
 from reposcout.chunking import chunk_file, detect_language
+
+needs_grammars = pytest.mark.skipif(
+    treesitter._load("javascript")[0] is None or treesitter._load("go")[0] is None,
+    reason="tree-sitter grammars could not be downloaded",
+)
+
+
+@pytest.fixture
+def regex_only(monkeypatch):
+    monkeypatch.setenv("REPOSCOUT_TREE_SITTER", "off")
 
 
 def names(chunks):
@@ -74,33 +87,94 @@ def test_syntax_error_falls_back_to_windows():
     assert len(chunks) == 1 and chunks[0].kind == "block"
 
 
-def test_javascript_definitions_detected():
-    source = """import x from "y";
+JS_SOURCE = """import x from "y";
 
+/** Adds two numbers. */
 export function add(a, b) {
-  return a + b;
+  return sum(a, b);
 }
 
 export const mul = async (a, b) => {
-  return a * b;
+  return a * helper(b);
 };
 
 class Shape {
-  area() { return 0; }
+  area() { return compute(0); }
 }
 """
-    found = names(chunk_file("math.js", source))
+
+GO_SOURCE = 'package main\n\nimport "fmt"\n\nfunc (s *Server) Start(port int) error {\n\tfmt.Println(port)\n\treturn s.listen(port)\n}\n\ntype Server struct {\n\tName string\n}\n'
+
+
+@needs_grammars
+def test_javascript_definitions_parsed_with_tree_sitter():
+    chunks = chunk_file("math.js", JS_SOURCE)
+    found = names(chunks)
+    assert ("function", "add") in found
+    assert ("function", "mul") in found
+    assert ("class", "Shape") in found
+    add = next(c for c in chunks if c.name == "add")
+    assert add.text.startswith("/** Adds")  # doc comment and `export` belong to the function
+    assert add.refs == ("sum",)
+    mul = next(c for c in chunks if c.name == "mul")
+    assert mul.text.startswith("export const mul")
+
+
+@needs_grammars
+def test_go_methods_and_types_with_call_refs():
+    chunks = chunk_file("main.go", GO_SOURCE)
+    assert ("method", "Start") in names(chunks)
+    assert ("class", "Server") in names(chunks)
+    start = next(c for c in chunks if c.name == "Start")
+    assert start.refs == ("Println", "listen")  # calls only, not type names
+
+
+@needs_grammars
+def test_large_typescript_class_splits_into_qualified_methods():
+    body = "".join(f"  m{i}() {{\n" + "".join(f"    x{j}();\n" for j in range(8)) + "  }\n" for i in range(8))
+    chunks = chunk_file("big.ts", f"class Big {{\n{body}}}\n", max_lines=30)
+    assert ("method", "Big.m0") in names(chunks) and ("method", "Big.m7") in names(chunks)
+    assert next(c for c in chunks if c.name == "Big.m3").refs[:2] == ("x0", "x1")
+
+
+@needs_grammars
+def test_rust_impl_blocks_hold_their_methods():
+    source = (
+        "#[derive(Debug)]\npub struct A { x: i32 }\n\nimpl A {\n"
+        + "".join(
+            f"    pub fn f{i}(&self) -> i32 {{\n"
+            + "".join(f"        g{j}();\n" for j in range(6))
+            + "        0\n    }\n"
+            for i in range(6)
+        )
+        + "}\n"
+    )
+    chunks = chunk_file("a.rs", source, max_lines=20)
+    struct = chunks[0]
+    assert struct.name == "A" and struct.text.startswith("#[derive(Debug)]")
+    assert ("method", "A.f0") in names(chunks)
+
+
+def test_regex_fallback_without_tree_sitter(regex_only):
+    found = names(chunk_file("math.js", JS_SOURCE))
     assert ("definition", "add") in found
     assert ("definition", "mul") in found
     assert ("definition", "Shape") in found
+    assert ("definition", "Start") in names(chunk_file("main.go", GO_SOURCE))
+    add = next(c for c in chunk_file("math.js", JS_SOURCE) if c.name == "add")
+    assert "sum" in add.refs and "function" not in add.refs
 
 
-def test_go_and_markdown():
-    go = 'package main\n\nimport "fmt"\n\nfunc (s *Server) Start(port int) error {\n\treturn nil\n}\n\ntype Server struct {\n\tName string\n}\n'
-    assert ("definition", "Start") in names(chunk_file("main.go", go))
+def test_python_chunks_record_calls():
+    (chunk,) = chunk_file("a.py", "def a():\n    return b(1) + self.c() + a()\n")
+    assert chunk.refs == ("b", "c")  # recursion into itself is not a reference
+
+
+def test_markdown_sections():
     md = "# Title\n\nIntro text.\n\n## Install\n\nRun pip.\nThen run it.\n"
     sections = chunk_file("README.md", md)
     assert [c.name for c in sections] == ["Title", "Install"]
+    assert all(c.refs == () for c in sections)
 
 
 def test_empty_and_blank_files_produce_no_chunks():
