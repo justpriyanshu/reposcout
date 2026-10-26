@@ -1,0 +1,44 @@
+{
+  "name": "reposcout-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "RepoScout web UI: the public toolkit app and the local `reposcout serve` page.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "1.2.0",
+    "@radix-ui/react-slot": "1.4.0",
+    "@radix-ui/react-tabs": "1.1.22",
+    "@tanstack/react-query": "5.104.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sonner": "2.0.8",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "@vitest/coverage-v8": "5.0.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
