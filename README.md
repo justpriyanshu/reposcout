@@ -37,15 +37,17 @@ Reviewed 1 file(s) (+4/-0): 1 major.
 
 ## Engineering highlights
 
-- **Code-aware chunking.** Python is parsed with the `ast` module so every chunk is a whole function, method or class (long ones are split along their nested definitions). JavaScript/TypeScript, Go, Rust, Java, Kotlin, Ruby, PHP, shell, SQL and Markdown use definition-line detection; everything else falls back to overlapping windows.
+- **Code-aware chunking.** Python is parsed with the `ast` module and 13 other languages (JavaScript/TypeScript, Go, Rust, Java, Kotlin, Scala, C#, Swift, C/C++, Ruby, PHP) with [tree-sitter](https://tree-sitter.github.io), so every chunk is a whole function, method or class with its doc comment, decorators or `export` (long ones are split along their nested definitions). Markdown, SQL and shell use definition-line detection, which is also the fallback when a grammar can't be loaded; everything else falls back to overlapping windows.
+- **Symbol graph.** Each chunk records the functions it calls (tree-sitter tags queries, the same ones GitHub's code navigation uses), so "who calls `verify_token`?" is an index lookup. The reviewer uses it to show the model the callers of a changed function.
 - **Hybrid retrieval with Reciprocal Rank Fusion.** SQLite FTS5 (BM25, Porter stemming, identifiers split so `getUserId` matches "user id") is combined with cosine similarity over embeddings. RRF merges the two rankings without having to calibrate their scores.
 - **Source-first ranking.** Tests and docs mention the same words as the code they describe, so they are down-weighted unless the question is about tests or docs. On the bundled eval this raised recall@5 from 0.55 to 0.80.
 - **Incremental indexing.** Files are hashed (SHA-256); re-indexing only re-embeds files that changed and removes deleted ones. Index schema and chunker versions are tracked so upgrades rebuild automatically, and an index built with one embedding model refuses to be queried with another.
-- **No vector database to run.** Vectors live in the same SQLite file and are searched with NumPy, which is fast up to hundreds of thousands of chunks and keeps deployment to a single file.
-- **Rules + LLM review.** 16 deterministic rules (secrets, SQL injection, `shell=True`, disabled TLS checks, unsafe YAML/pickle, debugger statements, XSS sinks...) run on every added line in milliseconds. The LLM handles logic bugs. Duplicates are merged, with rules winning ties.
+- **No vector database to run.** Locally, vectors live in the same SQLite file and are searched with [sqlite-vec](https://github.com/asg017/sqlite-vec) (NumPy when the extension isn't available). The public app can keep every index in one Postgres database instead (pgvector `halfvec` + `tsvector`, e.g. Neon's free tier), so hosts that wipe their disk on restart, like Render's free plan, keep their indexes.
+- **Optional reranking.** A cross-encoder (Jina's reranker API) can re-order the top 30 hybrid results; it never breaks search if the API is down.
+- **Rules + scanners + LLM review.** 16 deterministic rules (secrets, SQL injection, `shell=True`, disabled TLS checks, unsafe YAML/pickle, debugger statements, XSS sinks...) run on every added line in milliseconds, next to [Bandit](https://bandit.readthedocs.io) (reads the whole changed Python file) and [gitleaks](https://github.com/gitleaks/gitleaks) (~200 secret formats). [Semgrep](https://semgrep.dev) can be switched on too and runs in CI. The LLM handles logic bugs. Duplicates are merged, with rules winning ties, and only lines the change adds are reported.
 - **Hallucination guards.** The model must return JSON matching a Pydantic schema; invalid items are dropped individually. Findings that point at lines not in the diff are snapped to the nearest added line (within 3) or discarded, and every drop is counted in the review stats.
-- **Cross-file context.** For each changed file, the reviewer looks up the definitions of functions the change calls and adds them to the prompt, so the model can see signatures and behaviour it would otherwise guess.
-- **Production details.** Parallel per-file review, retries with backoff that honour `Retry-After`, HMAC-verified and idempotent webhooks (GitHub re-deliveries never produce duplicate reviews), a fallback to a summary review if GitHub rejects an inline comment position, per-route latency metrics, and a `--fail-on` exit code for CI gates.
+- **Cross-file context.** For each changed file, the reviewer looks up the definitions of functions the change calls and the callers of functions it modifies, and adds them to the prompt, so the model can see signatures, behaviour and breakage it would otherwise guess.
+- **Production details.** A fallback chain across free LLM providers (Groq, Gemini, OpenRouter, Cerebras) when one is rate limited, optional Sentry error tracking and Langfuse LLM traces, parallel per-file review, retries with backoff that honour `Retry-After`, HMAC-verified and idempotent webhooks (GitHub re-deliveries never produce duplicate reviews), a fallback to a summary review if GitHub rejects an inline comment position, per-route latency metrics, and a `--fail-on` exit code for CI gates.
 
 ## Quick start (free, local)
 
@@ -57,10 +59,12 @@ ollama pull nomic-embed-text      # embeddings (~270 MB)
 ollama pull qwen2.5-coder:7b      # chat/review model (~4.7 GB, needs ~8 GB RAM)
                                   # low on RAM? use qwen2.5-coder:3b or :1.5b
 
-# 2. Install RepoScout
+# 2. Install RepoScout (with uv: https://docs.astral.sh/uv/)
 git clone <your-repo-url> reposcout && cd reposcout
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+uv sync --all-extras                                 # creates .venv with everything
+source .venv/bin/activate                            # Windows: .venv\Scripts\activate
+npm --prefix frontend ci && npm --prefix frontend run build   # the web UI (needs Node 22+)
+# Without uv: python -m venv .venv && pip install -e ".[dev]"
 
 # 3. Index a repository and use it
 reposcout index --repo /path/to/some/project
@@ -69,7 +73,7 @@ reposcout review --git main --repo /path/to/some/project
 reposcout serve --repo /path/to/some/project          # web UI on http://127.0.0.1:8000
 ```
 
-Any coding model from the [Ollama library](https://ollama.com/library) works: set `REPOSCOUT_LLM_MODEL`.
+Any coding model from the [Ollama library](https://ollama.com/library) works: set `REPOSCOUT_LLM_MODEL`. With more RAM, a newer coder model (the Qwen3-Coder family) gives better answers and fewer wrong review comments. For better code search, `ollama pull qwen3-embedding:0.6b` and set `REPOSCOUT_EMBED_MODEL=qwen3-embedding:0.6b` (then `reposcout index --rebuild`).
 
 **No models at all?** Everything except LLM answers works offline:
 
@@ -88,7 +92,16 @@ export REPOSCOUT_LLM_PROVIDER=openai
 export REPOSCOUT_OPENAI_BASE_URL=https://api.groq.com/openai/v1
 export REPOSCOUT_OPENAI_API_KEY=your-key
 export REPOSCOUT_LLM_MODEL=llama-3.3-70b-versatile
+
+# Optional: models to try when the main one is rate limited or down
+export REPOSCOUT_LLM_FALLBACKS="gemini:gemini-2.5-flash,openrouter:qwen/qwen3-coder:free"
+export GEMINI_API_KEY=... OPENROUTER_API_KEY=...
+
+# Optional: hosted code embeddings and reranking (free tokens, non-commercial use)
+export REPOSCOUT_EMBED_PROVIDER=jina REPOSCOUT_RERANK_PROVIDER=jina JINA_API_KEY=...
 ```
+
+Free-tier limits and model names change often; check each provider's current ones.
 
 ## Commands
 
@@ -100,6 +113,8 @@ export REPOSCOUT_LLM_MODEL=llama-3.3-70b-versatile
 | `reposcout review [--git BASE \| --staged \| --diff FILE]` | Review local changes. Defaults to uncommitted changes vs `HEAD`. |
 | `reposcout review-pr owner/repo#12 [--post]` | Review a GitHub PR; `--post` publishes it as PR comments. |
 | `reposcout serve [--host --port]` | Web UI, JSON API and GitHub webhook receiver. |
+| `reposcout serve-public [--host --port]` | The public multi-repository app (visitors bring their own API key); deploy it on [Render + Neon](docs/DEPLOY-RENDER.md) (free) or [your own server](docs/DEPLOY.md). |
+| `reposcout grammars` | Download the tree-sitter grammars ahead of time (Docker images, offline use). |
 | `reposcout eval retrieval\|review DATASET` | Measure quality on a labelled dataset. |
 | `reposcout status` | Index statistics. |
 
@@ -141,10 +156,15 @@ All settings are environment variables (see `.env.example`).
 | Variable | Default | Meaning |
 |---|---|---|
 | `REPOSCOUT_REPO_PATH` | current directory | Repository to index and serve |
-| `REPOSCOUT_EMBED_PROVIDER` | `ollama` | `ollama`, `openai` or `hash` |
-| `REPOSCOUT_EMBED_MODEL` | `nomic-embed-text` | Embedding model |
+| `REPOSCOUT_EMBED_PROVIDER` | `ollama` | `ollama`, `jina`, `openai` or `hash` |
+| `REPOSCOUT_EMBED_MODEL` | provider's default | `nomic-embed-text` (Ollama, OpenAI-compatible), `jina-embeddings-v2-base-code` (Jina) |
 | `REPOSCOUT_LLM_PROVIDER` | `ollama` | `ollama` or `openai` (any OpenAI-compatible API) |
 | `REPOSCOUT_LLM_MODEL` | `qwen2.5-coder:7b` | Chat model |
+| `REPOSCOUT_LLM_FALLBACKS` | | Backup models, `provider:model,...` (groq, gemini, openrouter, cerebras, ollama, openai); keys from `<PROVIDER>_API_KEY` |
+| `REPOSCOUT_RERANK_PROVIDER` | `none` | `none` or `jina` |
+| `REPOSCOUT_JINA_API_KEY` | | Key for Jina embeddings/reranking (`JINA_API_KEY` also works) |
+| `REPOSCOUT_SCANNERS` | `bandit,gitleaks` | Static analysers in reviews: any of `bandit`, `gitleaks`, `semgrep`, or `none`; missing tools are skipped |
+| `REPOSCOUT_VECTOR_BACKEND` | `auto` | `auto`, `sqlite-vec` or `numpy` |
 | `REPOSCOUT_OLLAMA_URL` | `http://localhost:11434` | Ollama address |
 | `REPOSCOUT_OPENAI_BASE_URL` | `https://api.groq.com/openai/v1` | OpenAI-compatible endpoint |
 | `REPOSCOUT_OPENAI_API_KEY` | | API key for that endpoint |
@@ -153,6 +173,10 @@ All settings are environment variables (see `.env.example`).
 | `REPOSCOUT_TOP_K` | `8` | Snippets retrieved per question |
 | `REPOSCOUT_CHUNK_MAX_LINES` | `80` | Longest chunk before splitting |
 | `REPOSCOUT_MAX_FILE_BYTES` | `400000` | Larger files are not indexed |
+| `SENTRY_DSN` | | Send errors to Sentry (`observability` extra) |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | | Trace LLM calls in Langfuse (`observability` extra) |
+
+The public app's settings (database, limits, rate-limit storage) are listed in [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md#settings-for-the-public-app).
 
 Files listed in `.gitignore` or `.reposcoutignore` are not indexed, nor are dependencies, build output, lockfiles and binaries.
 
@@ -185,20 +209,20 @@ The three review misses in rules-only mode are logic bugs that need the LLM. Run
 ```mermaid
 flowchart LR
     subgraph Indexing
-        A[Repository files] -->|git ls-files / .gitignore| B[Chunker<br/>AST / definition lines]
-        B --> C[Embedder<br/>Ollama / API / hash]
-        B --> D[(SQLite<br/>chunks + FTS5 + vectors)]
+        A[Repository files] -->|git ls-files / .gitignore| B[Chunker<br/>AST / tree-sitter / patterns]
+        B --> C[Embedder<br/>Ollama / Jina / API / hash]
+        B --> D[(SQLite: FTS5 + sqlite-vec<br/>or Postgres: tsvector + pgvector<br/>chunks, symbol graph)]
         C --> D
     end
     subgraph Ask
         Q[Question] --> H[Hybrid search<br/>BM25 + cosine, RRF]
         D --> H
-        H --> P[Numbered snippets] --> L1[LLM] --> R[Answer with citations]
+        H --> RR[Optional reranker] --> P[Numbered snippets] --> L1[LLM, with fallbacks] --> R[Answer with citations]
     end
     subgraph Review
         G[Diff: local / PR] --> PD[Diff parser<br/>new-file line numbers]
-        PD --> RU[Rules]
-        PD --> CX[Related code<br/>symbol lookup + search]
+        PD --> RU[Rules + Bandit + gitleaks]
+        PD --> CX[Related code<br/>definitions, callers, search]
         D --> CX
         CX --> L2[LLM, JSON schema]
         RU --> M[Validate, snap lines,<br/>dedupe, rank]
@@ -209,40 +233,51 @@ flowchart LR
 
 ```
 src/reposcout/
-  chunking.py      code-aware chunking
-  embeddings.py    Ollama, OpenAI-compatible and hashing embedders
-  store.py         SQLite index, FTS5 keyword search, vector search, RRF fusion
+  chunking.py      code-aware chunking (ast for Python, regex fallback)
+  treesitter.py    tree-sitter chunking and call references for 13 languages
+  embeddings.py    Ollama, Jina, OpenAI-compatible and hashing embedders
+  store.py         SQLite index, FTS5 keyword search, sqlite-vec/NumPy vector search, RRF fusion
+  pg_store.py      the same index on Postgres (pgvector + tsvector) for the public app
+  rerank.py        optional second-stage reranking
+  observability.py Sentry and Langfuse hooks
   paths.py         test/doc detection and source-first ranking weights
   indexer.py       incremental repository indexing
   assistant.py     question answering (RAG) with citations
-  llm.py           Ollama and OpenAI-compatible chat clients with retries
-  review/          diff parser, rules, LLM reviewer, finding schema
+  llm.py           Ollama and OpenAI-compatible chat clients with retries and fallbacks
+  review/          diff parser, rules, scanners (Bandit, gitleaks, Semgrep), LLM reviewer, finding schema
   github.py        PR diffs, review posting, webhook signature check
   server.py        FastAPI app: API, web UI, webhook
-  static_files.py  serves the web UI's static files
-  static/          web UI: app.html, index.html, ui.css, js/ modules
+  web/             the public multi-repository app (workspace, limits, GitHub links)
+  static_files.py  serves the built web UI (static/dist, built from frontend/)
   evaluation.py    retrieval and review metrics
   cli.py           command-line interface
+frontend/          web UI: React + Vite + TypeScript, TanStack Query, Tailwind + shadcn/ui
 evals/             labelled datasets
-tests/             Python tests (no network or model needed); tests/js: Node tests for the web UI modules
+tests/             Python tests (no model or GitHub access needed)
 docs/DESIGN.md     design decisions and trade-offs
 ```
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest              # runs offline: models and GitHub are faked
-node --test "tests/js/*.test.mjs"   # web UI module tests (CI runs these too)
-ruff check src tests && ruff format --check src tests
+uv sync --all-extras                         # Python, plus Postgres, scanner and monitoring extras
+npm --prefix frontend ci && npm --prefix frontend run build
+uv run pytest --cov                          # models and GitHub are faked
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run pyright                               # type check
+npm --prefix frontend run typecheck && npm --prefix frontend test   # Vitest
+npm --prefix frontend run test:e2e           # Playwright (npx playwright install chromium once)
+npm --prefix frontend run dev                # UI dev server; proxies the API to 127.0.0.1:8000
 ```
+
+The Postgres tests run when `REPOSCOUT_TEST_DATABASE_URL` points at a Postgres with pgvector (e.g. `docker run -e POSTGRES_PASSWORD=pg -p 5432:5432 pgvector/pgvector:0.8.7-pg17`, then `postgresql://postgres:pg@localhost:5432/postgres`); they are skipped otherwise. Scanner tests use `gitleaks` and `semgrep` when installed. CI runs all of it, plus Semgrep over the code.
 
 Docker: `docker compose up -d`, then `docker compose exec ollama ollama pull nomic-embed-text`, `docker compose exec ollama ollama pull qwen2.5-coder:7b`, and `docker compose exec reposcout reposcout index`. Set `REPO_TO_INDEX=/path/to/repo` to choose what is mounted.
 
 ## Limitations
 
 - Retrieval quality depends on the embedding model; the `hash` embedder only matches words, not meaning.
-- Non-Python languages are chunked by definition-line patterns, not a full parser, so unusual formatting can produce coarser chunks.
+- tree-sitter grammars are downloaded on first use (the Docker images include them; `reposcout grammars` fetches them ahead of time). Without them, non-Python code is chunked by definition-line patterns, which gives coarser chunks.
 - The webhook server reviews PRs with context from the locally indexed checkout, which may lag behind the PR's base branch.
 - Small local models produce more false positives than large hosted ones; use `--min-severity minor` to cut noise.
 

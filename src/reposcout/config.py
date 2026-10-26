@@ -50,14 +50,29 @@ class Settings:
     repo_path: Path = field(default_factory=lambda: Path(_env("REPO_PATH", ".")).resolve())
     index_dir_name: str = ".reposcout"
 
-    # Embeddings: "ollama" (local, free), "openai" (any OpenAI-compatible API) or
-    # "hash" (no model at all, lexical only; good for CI and tests).
+    # Embeddings: "ollama" (local, free), "jina" (hosted code embeddings, free tokens),
+    # "openai" (any OpenAI-compatible API) or "hash" (no model at all, lexical only; good
+    # for CI and tests). An empty model means the provider's default (see embeddings.py).
     embed_provider: str = field(default_factory=lambda: _env("EMBED_PROVIDER", "ollama"))
-    embed_model: str = field(default_factory=lambda: _env("EMBED_MODEL", "nomic-embed-text"))
+    embed_model: str = field(default_factory=lambda: _env("EMBED_MODEL", ""))
 
     # Chat model: "ollama" or "openai" (OpenAI-compatible: Groq, Gemini, LM Studio, vLLM...).
     llm_provider: str = field(default_factory=lambda: _env("LLM_PROVIDER", "ollama"))
     llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "qwen2.5-coder:7b"))
+    # Models tried in order when the main one fails or is rate limited, as comma-separated
+    # "provider:model" pairs, e.g. "gemini:gemini-2.5-flash,openrouter:qwen/qwen3-coder:free".
+    # Providers: groq, gemini, openrouter, cerebras, ollama (keys: GROQ_API_KEY, ...).
+    llm_fallbacks: str = field(default_factory=lambda: _env("LLM_FALLBACKS", ""))
+
+    # Second-stage reranking of search results: "none" or "jina".
+    rerank_provider: str = field(default_factory=lambda: _env("RERANK_PROVIDER", "none"))
+    rerank_model: str = field(
+        default_factory=lambda: _env("RERANK_MODEL", "jina-reranker-v2-base-multilingual")
+    )
+    rerank_candidates: int = field(default_factory=lambda: _env_int("RERANK_CANDIDATES", 30))
+    jina_api_key: str = field(
+        default_factory=lambda: _env("JINA_API_KEY", "") or os.environ.get("JINA_API_KEY", "")
+    )
 
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://localhost:11434"))
     openai_base_url: str = field(
@@ -71,6 +86,10 @@ class Settings:
     github_api_url: str = field(
         default_factory=lambda: os.environ.get("GITHUB_API_URL", "https://api.github.com")
     )
+
+    # Static analysers run next to the built-in rules (see review/scanners.py): any of
+    # bandit, gitleaks, semgrep, or "none". Missing tools are skipped.
+    scanners: str = field(default_factory=lambda: _env("SCANNERS", "bandit,gitleaks"))
 
     # Tuning knobs.
     max_file_bytes: int = field(default_factory=lambda: _env_int("MAX_FILE_BYTES", 400_000))

@@ -65,8 +65,14 @@ def test_repo_key_and_pr_line_url():
 # ------------------------------------------------------------------ workspace
 
 
-@pytest.fixture
-def public_settings(tmp_path) -> PublicSettings:
+@pytest.fixture(params=["files", "postgres"])
+def public_settings(request, tmp_path, monkeypatch) -> PublicSettings:
+    """Workspace tests run twice: indexes in SQLite files, and in Postgres (skipped unless
+    REPOSCOUT_TEST_DATABASE_URL is set). Settings built inside a test inherit the choice."""
+    monkeypatch.delenv("REPOSCOUT_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    if request.param == "postgres":
+        monkeypatch.setenv("REPOSCOUT_DATABASE_URL", request.getfixturevalue("pg_url"))
     return PublicSettings(
         data_dir=tmp_path / "data",
         max_repos=5,
@@ -258,6 +264,16 @@ PR_DIFF = """diff --git a/billing/invoice.py b/billing/invoice.py
 class FakeGitHub:
     def __init__(self, files=1, lines=2):
         self.files, self.lines = files, lines
+        self.diff = PR_DIFF
+        self.sources: dict[str, str] = {}  # files at the PR's head commit
+        self.loaded: list[str] = []
+
+    def source_loader(self, pr):
+        def load(path):
+            self.loaded.append(path)
+            return self.sources.get(path)
+
+        return load
 
     def repo(self, repo):
         raise GitHubAPIError("offline", 503)
@@ -279,7 +295,7 @@ class FakeGitHub:
         }
 
     def pull_diff(self, repo, number):
-        return PR_DIFF
+        return self.diff
 
 
 class FakeGroq:
@@ -359,9 +375,13 @@ def test_full_flow(api):
     client, ws, groq, _ = api
     assert "RepoScout" in client.get("/").text
     page = client.get("/").text
-    assert f"/static/{static_files.version()}/ui.css" in page and "{{" not in page
-    css = client.get(f"/static/{static_files.version()}/ui.css")
-    assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
+    assert "{{" not in page
+    # The built UI links its content-hashed stylesheet; without a build the page explains how to build.
+    styles = [part.split('"')[0] for part in page.split('rel="stylesheet" crossorigin href="')[1:]]
+    assert styles if static_files.built() else static_files.BUILD_COMMAND in page
+    for url in styles:
+        css = client.get(url)
+        assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
     assert client.get("/api/config").json()["provider"] == "Groq"
 
     resp = client.post("/api/repos", json={"url": "https://github.com/Octo/Shop"})
@@ -506,8 +526,14 @@ def test_refresh_swaps_index_files_without_disturbing_readers(public_settings, s
     ws.drain()
     assert reader.find_symbol("verify_token")  # still readable after the swap
     assert ws.store(repo) is not reader
-    index_files = sorted(p.name for p in (public_settings.data_dir / "indexes").glob("*.db"))
-    assert len(index_files) == 1 and index_files[0].startswith("octo__shop.")
+    if public_settings.database_url:
+        # The old generation is retired, then dropped once readers are done with it.
+        assert len(ws.pg.index_ids()) == 2
+        ws.indexes.reap(force=True)
+        assert ws.pg.index_ids() == {ws.store(repo).index_id}
+    else:
+        index_files = sorted(p.name for p in (public_settings.data_dir / "indexes").glob("*.db"))
+        assert len(index_files) == 1 and index_files[0].startswith("octo__shop.")
     assert not list((public_settings.data_dir / "repos").iterdir())  # checkouts are cleaned up
 
 
@@ -723,3 +749,37 @@ def test_huge_pr_diffs_are_refused():
         gh.pull_diff(RepoId("o", "r"), 1, max_bytes=100_000)
     assert info.value.status == 413
     assert gh.pull_diff(RepoId("o", "r"), 1, max_bytes=2_000_000).startswith("+x")
+
+
+def test_rate_limiter_moving_window():
+    from reposcout.web.limits import RateLimiter
+
+    limiter = RateLimiter(2, 600, name="test")
+    assert limiter.check("a") == 0 and limiter.check("a") == 0
+    wait = limiter.check("a")
+    assert 1 <= wait <= 600
+    assert limiter.check("b") == 0  # each visitor has their own window
+    other = RateLimiter(2, 600, name="other")
+    assert other.check("a") == 0  # limiters don't share counters
+
+
+def test_review_runs_bandit_on_the_changed_file(api):
+    pytest.importorskip("bandit")
+    client, ws, groq, github = api
+    github.diff = """diff --git a/tools/run.py b/tools/run.py
+--- a/tools/run.py
++++ b/tools/run.py
+@@ -1,3 +1,4 @@
+ import subprocess
+ def run(cmd):
++    subprocess.call(cmd, shell=True)
+     return eval(cmd)
+"""
+    github.sources["tools/run.py"] = (
+        "import subprocess\ndef run(cmd):\n    subprocess.call(cmd, shell=True)\n    return eval(cmd)\n"
+    )
+    data = client.post("/api/review", json={"url": "octo/shop#7", "min_severity": "nit"}, headers=KEY).json()
+    sources = {(f["line"], f["source"]) for f in data["findings"]}
+    assert (3, "rule:bandit-B602") in sources
+    assert not any(line == 4 and src.startswith("rule:bandit") for line, src in sources)  # unchanged line
+    assert github.loaded == ["tools/run.py"]

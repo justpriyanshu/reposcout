@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -36,7 +37,9 @@ class LLMUsage:
 
 class LLM(Protocol):
     name: str
-    usage: LLMUsage
+
+    @property
+    def usage(self) -> LLMUsage: ...
 
     def complete(
         self, system: str, user: str, *, json_mode: bool = False, temperature: float = 0.1
@@ -215,15 +218,115 @@ class OpenAICompatibleLLM:
         return data["choices"][0]["message"].get("content") or ""
 
 
+# Free-tier providers with OpenAI-compatible APIs, for REPOSCOUT_LLM_FALLBACKS. Each reads
+# its key from REPOSCOUT_<NAME>_API_KEY or <NAME>_API_KEY (e.g. GEMINI_API_KEY).
+PROVIDER_PRESETS = {
+    "groq": "https://api.groq.com/openai/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "cerebras": "https://api.cerebras.ai/v1",
+}
+# With somewhere to fall back to, a rate-limited model is skipped quickly instead of waited for.
+FALLBACK_RETRY_ATTEMPTS = 2
+FALLBACK_MAX_RETRY_WAIT = 5.0
+
+
+class FallbackLLM:
+    """Tries each model in order and moves on when one fails: rate limits, outages, a
+    revoked key or a retired model. Free tiers change their limits often, so a chain such
+    as Groq -> Gemini -> OpenRouter keeps reviews running when one of them says no."""
+
+    def __init__(self, llms: list[LLM]):
+        if not llms:
+            raise ValueError("FallbackLLM needs at least one model")
+        self.llms = llms
+        self.name = " -> ".join(llm.name for llm in llms)
+        self.last_used: str | None = None
+
+    @property
+    def usage(self) -> LLMUsage:
+        total = LLMUsage()
+        for llm in self.llms:
+            total.calls += llm.usage.calls
+            total.prompt_tokens += llm.usage.prompt_tokens
+            total.completion_tokens += llm.usage.completion_tokens
+            total.seconds += llm.usage.seconds
+        return total
+
+    def complete(self, system: str, user: str, *, json_mode: bool = False, temperature: float = 0.1) -> str:
+        errors = []
+        for llm in self.llms:
+            try:
+                text = llm.complete(system, user, json_mode=json_mode, temperature=temperature)
+            except ProviderError as exc:
+                log.warning("%s failed (%s); trying the next model", llm.name, exc)
+                errors.append(f"{llm.name}: {exc}")
+                continue
+            self.last_used = llm.name
+            return text
+        raise ProviderError("Every configured model failed. " + " | ".join(errors))
+
+
+def _api_key(provider: str) -> str:
+    name = provider.upper()
+    return os.environ.get(f"REPOSCOUT_{name}_API_KEY") or os.environ.get(f"{name}_API_KEY", "")
+
+
+def parse_fallbacks(spec: str, settings: Settings) -> list[LLM]:
+    """``"gemini:gemini-2.5-flash, openrouter:qwen/qwen3-coder:free"`` -> clients. The
+    model is everything after the first colon, so OpenRouter's ``:free`` suffix works."""
+    llms: list[LLM] = []
+    for entry in (e.strip() for e in spec.split(",")):
+        if not entry:
+            continue
+        provider, sep, model = entry.partition(":")
+        provider = provider.strip().lower()
+        if not sep or not model.strip():
+            raise RepoScoutError(f"LLM fallback '{entry}' must look like provider:model")
+        model = model.strip()
+        if provider == "ollama":
+            llms.append(OllamaLLM(model, settings.ollama_url, settings.request_timeout))
+            continue
+        if provider == "openai":
+            base_url, key = settings.openai_base_url, settings.openai_api_key
+        elif provider in PROVIDER_PRESETS:
+            base_url, key = PROVIDER_PRESETS[provider], _api_key(provider)
+            if not key:
+                raise RepoScoutError(
+                    f"LLM fallback '{entry}' needs {provider.upper()}_API_KEY "
+                    f"(or REPOSCOUT_{provider.upper()}_API_KEY)."
+                )
+        else:
+            known = ", ".join(["ollama", "openai", *PROVIDER_PRESETS])
+            raise RepoScoutError(f"Unknown LLM fallback provider '{provider}' (use {known})")
+        llm = OpenAICompatibleLLM(
+            model,
+            base_url,
+            key,
+            settings.request_timeout,
+            retry_attempts=FALLBACK_RETRY_ATTEMPTS,
+            max_retry_wait=FALLBACK_MAX_RETRY_WAIT,
+        )
+        llm.name = f"{provider}:{model}"
+        llms.append(llm)
+    return llms
+
+
 def make_llm(settings: Settings) -> LLM:
+    fallbacks = parse_fallbacks(settings.llm_fallbacks, settings) if settings.llm_fallbacks else []
+    quick = {"retry_attempts": FALLBACK_RETRY_ATTEMPTS, "max_retry_wait": FALLBACK_MAX_RETRY_WAIT}
     provider = settings.llm_provider.lower()
+    primary: LLM
     if provider == "ollama":
-        return OllamaLLM(settings.llm_model, settings.ollama_url, settings.request_timeout)
-    if provider == "openai":
-        return OpenAICompatibleLLM(
+        primary = OllamaLLM(settings.llm_model, settings.ollama_url, settings.request_timeout)
+    elif provider == "openai":
+        primary = OpenAICompatibleLLM(
             settings.llm_model,
             settings.openai_base_url,
             settings.openai_api_key,
             settings.request_timeout,
+            **(quick if fallbacks else {}),
         )
-    raise RepoScoutError(f"Unknown LLM provider '{settings.llm_provider}' (use ollama or openai)")
+    else:
+        raise RepoScoutError(f"Unknown LLM provider '{settings.llm_provider}' (use ollama or openai)")
+    return FallbackLLM([primary, *fallbacks]) if fallbacks else primary

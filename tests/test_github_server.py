@@ -158,9 +158,13 @@ def test_health_stats_and_ui(app_parts):
     assert stats["index"]["files"] == 4 and stats["github_enabled"]
     assert "RepoScout" in client.get("/").text
     page = client.get("/").text
-    assert f"/static/{static_files.version()}/ui.css" in page and "{{" not in page
-    css = client.get(f"/static/{static_files.version()}/ui.css")
-    assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
+    assert "{{" not in page
+    # The built UI links its content-hashed stylesheet; without a build the page explains how to build.
+    styles = [part.split('"')[0] for part in page.split('rel="stylesheet" crossorigin href="')[1:]]
+    assert styles if static_files.built() else static_files.BUILD_COMMAND in page
+    for url in styles:
+        css = client.get(url)
+        assert css.headers["content-type"].startswith("text/css") and "--blue" in css.text
     assert "GET /health" in client.get("/stats").json()["requests"]
 
 

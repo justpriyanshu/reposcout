@@ -1,5 +1,7 @@
 # Deploying the public RepoScout app on AWS
 
+> Hosting on Render's free plan instead? See [DEPLOY-RENDER.md](DEPLOY-RENDER.md).
+
 This puts RepoScout on the internet so anyone can paste a public GitHub repository or pull
 request link. Visitors use **their own** free Groq API key; it stays in their browser and is
 sent only with their own requests, so your API quota is never used.

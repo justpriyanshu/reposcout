@@ -123,6 +123,8 @@ class OllamaEmbedder:
 class OpenAICompatibleEmbedder:
     """Embeddings from any OpenAI-compatible ``/embeddings`` endpoint."""
 
+    prefix = "openai"
+
     def __init__(
         self,
         model: str,
@@ -133,7 +135,7 @@ class OpenAICompatibleEmbedder:
         client: httpx.Client | None = None,
     ):
         self.model = model
-        self.name = f"openai:{model}"
+        self.name = f"{self.prefix}:{model}"
         self.base_url = base_url.rstrip("/")
         self.batch_size = batch_size
         self.headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -151,6 +153,8 @@ class OpenAICompatibleEmbedder:
                 )
             except httpx.HTTPError as exc:
                 raise ProviderError(f"Could not reach {self.base_url}: {exc}") from exc
+            if resp.status_code in (401, 403):
+                raise ProviderError(f"The embedding API at {self.base_url} rejected the API key.")
             if resp.status_code >= 400:
                 raise ProviderError(f"Embedding API error {resp.status_code}: {resp.text[:300]}")
             items = sorted(resp.json()["data"], key=lambda d: d["index"])
@@ -158,19 +162,47 @@ class OpenAICompatibleEmbedder:
         return _normalise(np.array(vectors, dtype=np.float32))
 
 
+class JinaEmbedder(OpenAICompatibleEmbedder):
+    """Jina AI's hosted embeddings (OpenAI-compatible API). ``jina-embeddings-v2-base-code``
+    is trained on code and natural language; a new API key gets 10M free tokens
+    (non-commercial use). Get one at https://jina.ai/embeddings."""
+
+    prefix = "jina"
+    BASE_URL = "https://api.jina.ai/v1"
+
+    def __init__(self, model: str, api_key: str, timeout: float = 120, client: httpx.Client | None = None):
+        if not api_key:
+            raise RepoScoutError(
+                "REPOSCOUT_EMBED_PROVIDER=jina needs REPOSCOUT_JINA_API_KEY (or JINA_API_KEY)."
+            )
+        super().__init__(model, self.BASE_URL, api_key, timeout, batch_size=64, client=client)
+
+
+# Used when REPOSCOUT_EMBED_MODEL is empty. For better code search with Ollama, try
+# ``qwen3-embedding:0.6b`` (needs ``ollama pull qwen3-embedding:0.6b`` and a re-index).
+DEFAULT_EMBED_MODELS = {
+    "ollama": "nomic-embed-text",
+    "jina": "jina-embeddings-v2-base-code",
+    "openai": "nomic-embed-text",  # unchanged from earlier versions, so old indexes still match
+}
+
+
 def make_embedder(settings: Settings) -> Embedder:
     provider = settings.embed_provider.lower()
+    model = settings.embed_model or DEFAULT_EMBED_MODELS.get(provider, "")
     if provider == "hash":
         return HashingEmbedder()
     if provider == "ollama":
-        return OllamaEmbedder(settings.embed_model, settings.ollama_url, settings.request_timeout)
+        return OllamaEmbedder(model, settings.ollama_url, settings.request_timeout)
+    if provider == "jina":
+        return JinaEmbedder(model, settings.jina_api_key, settings.request_timeout)
     if provider == "openai":
         return OpenAICompatibleEmbedder(
-            settings.embed_model,
+            model,
             settings.openai_base_url,
             settings.openai_api_key,
             settings.request_timeout,
         )
     raise RepoScoutError(
-        f"Unknown embedding provider '{settings.embed_provider}' (use ollama, openai or hash)"
+        f"Unknown embedding provider '{settings.embed_provider}' (use ollama, jina, openai or hash)"
     )

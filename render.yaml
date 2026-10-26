@@ -30,3 +30,14 @@ services:
         sync: false
       - key: REPOSCOUT_WEBHOOK_SECRET
         generateValue: true
+      # Optional: backup models when Groq is rate limited, e.g.
+      # "gemini:gemini-2.5-flash,openrouter:qwen/qwen3-coder:free", with their keys.
+      - key: REPOSCOUT_LLM_FALLBACKS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Optional: error tracking
+      - key: SENTRY_DSN
+        sync: false

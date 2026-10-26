@@ -14,6 +14,7 @@ from . import __version__
 from .config import Settings, load_env_file
 from .errors import RepoScoutError
 from .review import Severity
+from .review.scanners import working_tree_loader
 from .services import Services, build_services
 
 SEVERITIES = [s.value for s in Severity]
@@ -142,7 +143,9 @@ def cmd_review(args) -> int:
     if not diff.strip():
         print("Nothing to review: the diff is empty.")
         return 0
-    result = services.reviewer.review(diff)
+    # A diff from git describes the working tree, so whole-file scanners can read it there.
+    loader = None if args.diff else working_tree_loader(services.settings.repo_path)
+    result = services.reviewer.review(diff, load_source=loader)
     _output_review(result, args.format)
     return _exit_code(result, args.fail_on)
 
@@ -161,7 +164,9 @@ def cmd_review_pr(args) -> int:
     client = GitHubClient(settings.github_token, settings.github_api_url)
     pr = client.get_pull_request(ref)
     diff = client.get_pull_request_diff(ref)
-    result = services.reviewer.review(diff, pr.get("title", ""), pr.get("body") or "")
+    result = services.reviewer.review(
+        diff, pr.get("title", ""), pr.get("body") or "", load_source=client.source_loader(pr)
+    )
     _output_review(result, args.format)
     if args.post:
         review = client.post_review(ref, pr["head"]["sha"], result)
@@ -172,8 +177,10 @@ def cmd_review_pr(args) -> int:
 def cmd_serve(args) -> int:
     import uvicorn
 
+    from .observability import init_sentry
     from .server import create_app
 
+    init_sentry("local")
     settings = _settings(args)
     app = create_app(settings)
     print(f"RepoScout serving {settings.repo_path} on http://{args.host}:{args.port}", file=sys.stderr)
@@ -184,6 +191,9 @@ def cmd_serve(args) -> int:
 def cmd_serve_public(args) -> int:
     import uvicorn
 
+    from .observability import init_sentry
+
+    init_sentry("public")
     from .embeddings import make_embedder
     from .web.app import build_public_app
     from .web.config import PublicSettings
@@ -202,6 +212,17 @@ def cmd_serve_public(args) -> int:
         proxy_headers=public.trust_proxy,
     )
     return 0
+
+
+def cmd_grammars(args) -> int:
+    from . import treesitter
+
+    ready = treesitter.prefetch()
+    missing = sorted((set(treesitter.GRAMMARS.values()) | {"tsx"}) - set(ready))
+    print(f"tree-sitter grammars ready: {', '.join(ready) or 'none'}")
+    if missing:
+        print(f"unavailable (regex chunking will be used): {', '.join(missing)}", file=sys.stderr)
+    return 0 if ready else 1
 
 
 def cmd_eval(args) -> int:
@@ -319,6 +340,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=cmd_serve_public)
+
+    p = sub.add_parser(
+        "grammars", parents=[common], help="download tree-sitter grammars ahead of time (Docker, offline use)"
+    )
+    p.set_defaults(func=cmd_grammars)
 
     p = sub.add_parser("eval", parents=[common], help="measure retrieval or review quality")
     p.add_argument("kind", choices=["retrieval", "review"])

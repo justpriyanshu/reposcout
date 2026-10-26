@@ -9,7 +9,8 @@ from dataclasses import asdict, dataclass, field
 from .embeddings import Embedder
 from .errors import IndexMismatchError
 from .llm import LLM
-from .store import IndexStore, SearchResult
+from .rerank import Reranker, apply_reranker
+from .store import BaseStore, SearchResult
 
 QA_SYSTEM_PROMPT = """You are a senior software engineer answering questions about a codebase.
 Rules:
@@ -76,14 +77,18 @@ def format_snippets(results: list[SearchResult], max_chars: int) -> tuple[str, l
 class RepoAssistant:
     def __init__(
         self,
-        store: IndexStore,
+        store: BaseStore,
         embedder: Embedder,
         llm: LLM | None,
         top_k: int = 8,
         max_context_chars: int = 24_000,
         repo_name: str | None = None,
+        reranker: Reranker | None = None,
+        rerank_candidates: int = 30,
     ):
         self.repo_name = repo_name
+        self.reranker = reranker
+        self.rerank_candidates = rerank_candidates
         self.store = store
         self.embedder = embedder
         self.llm = llm
@@ -102,7 +107,13 @@ class RepoAssistant:
                 f"'{self.embedder.name}'. Re-index with `reposcout index --rebuild`."
             )
         vector = self.embedder.embed([query])[0]
-        return self.store.hybrid_search(query, vector, k=k or self.top_k, exclude_paths=exclude_paths)
+        k = k or self.top_k
+        if self.reranker is None:
+            return self.store.hybrid_search(query, vector, k=k, exclude_paths=exclude_paths)
+        candidates = self.store.hybrid_search(
+            query, vector, k=max(k, self.rerank_candidates), exclude_paths=exclude_paths
+        )
+        return apply_reranker(self.reranker, query, candidates, k)
 
     def ask(self, question: str, k: int | None = None, history: list[dict] | None = None) -> Answer:
         """Answer ``question``. ``history`` holds earlier turns as

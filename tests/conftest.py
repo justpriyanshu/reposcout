@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -126,3 +127,30 @@ def make_assistant(indexed):
         return RepoAssistant(store, embedder, llm)
 
     return build
+
+
+PG_TABLES = ("rs_refs", "rs_chunks", "rs_files", "rs_meta", "rs_indexes", "repos")
+
+
+@pytest.fixture
+def pg_url():
+    """A Postgres (with pgvector) for tests; skipped unless REPOSCOUT_TEST_DATABASE_URL is set.
+    Every test starts from empty tables."""
+    url = os.environ.get("REPOSCOUT_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("set REPOSCOUT_TEST_DATABASE_URL to run the Postgres tests")
+    import psycopg
+
+    with psycopg.connect(url, autocommit=True) as conn:
+        for table in PG_TABLES:
+            conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+    return url
+
+
+@pytest.fixture
+def pg_db(pg_url):
+    from reposcout.pg_store import PgDatabase
+
+    db = PgDatabase(pg_url, max_size=2)
+    yield db
+    db.close()

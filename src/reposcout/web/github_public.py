@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 
 from ..errors import RepoScoutError
@@ -23,8 +25,10 @@ class PublicGitHub:
         api_url: str = "https://api.github.com",
         client: httpx.Client | None = None,
         timeout: float = 20,
+        raw_url: str = "https://raw.githubusercontent.com",
     ):
         self.api_url = api_url.rstrip("/")
+        self.raw_url = raw_url.rstrip("/")
         self.client = client or httpx.Client(timeout=timeout, follow_redirects=True)
         self.headers = {
             "Accept": "application/vnd.github+json",
@@ -61,6 +65,31 @@ class PublicGitHub:
 
     def pull(self, repo: RepoId, number: int) -> dict:
         return self._get(f"/repos/{repo.owner}/{repo.name}/pulls/{number}").json()
+
+    def raw_file(self, repo_full_name: str, sha: str, path: str, max_bytes: int = 400_000) -> str | None:
+        """A public file's text at a commit, from raw.githubusercontent.com (which doesn't
+        count against the API's hourly limit). None if missing or too big."""
+        url = f"{self.raw_url}/{quote(repo_full_name)}/{quote(sha)}/{quote(path)}"
+        try:
+            with self.client.stream("GET", url, headers={"User-Agent": "reposcout"}) as resp:
+                if resp.status_code != 200:
+                    return None
+                body = bytearray()
+                for piece in resp.iter_bytes():
+                    body.extend(piece)
+                    if len(body) > max_bytes:
+                        return None
+        except httpx.HTTPError:
+            return None
+        return body.decode("utf-8", "replace")
+
+    def source_loader(self, pr: dict):
+        head = pr.get("head") or {}
+        repo = (head.get("repo") or {}).get("full_name")
+        sha = head.get("sha")
+        if not repo or not sha:
+            return None
+        return lambda path: self.raw_file(repo, sha, path)
 
     def pull_diff(self, repo: RepoId, number: int, max_bytes: int = MAX_DIFF_BYTES) -> str:
         """The pull request as a unified diff; refuses diffs over ``max_bytes``."""

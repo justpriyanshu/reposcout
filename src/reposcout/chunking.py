@@ -1,9 +1,13 @@
 """Split source files into chunks that follow the code's own structure.
 
 Python files are parsed with the standard-library ``ast`` module, so every chunk is a
-whole function, method or class. Other languages use lightweight regex detection of
-definition lines (function, class, struct...). Anything else falls back to fixed-size
-windows with a small overlap.
+whole function, method or class. Other programming languages are parsed with tree-sitter
+(see ``treesitter.py``); when a grammar isn't available, lightweight regex detection of
+definition lines (function, class, struct...) takes over. Anything else falls back to
+fixed-size windows with a small overlap.
+
+Every chunk also records ``refs``: the names of the functions it calls. Together with
+chunk names (the definitions) they form a small symbol graph for "who calls X?".
 """
 
 from __future__ import annotations
@@ -13,8 +17,10 @@ import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
+from . import treesitter
+
 # Bump when chunking logic changes, so existing indexes are rebuilt with the new chunks.
-CHUNKER_VERSION = "2"
+CHUNKER_VERSION = "3"
 
 EXTENSION_LANGUAGES = {
     ".py": "python",
@@ -131,6 +137,7 @@ class Chunk:
     name: str | None
     language: str
     text: str
+    refs: tuple[str, ...] = ()  # names of functions called in this chunk
 
     @property
     def location(self) -> str:
@@ -162,13 +169,22 @@ def chunk_file(path: str, source: str, max_lines: int = 80, overlap: int = 10) -
         chunks = _chunk_python(path, source, lines, max_lines, overlap)
         if chunks is not None:
             return chunks
+    else:
+        chunks = treesitter.chunk_tree_sitter(
+            path, source, lines, language, max_lines, overlap, _windows, _leftover_chunks
+        )
+        if chunks is not None:
+            return chunks
     patterns = DEFINITION_PATTERNS.get(language)
     if patterns:
-        return _chunk_by_patterns(path, lines, language, patterns, max_lines, overlap)
+        chunks = _chunk_by_patterns(path, lines, language, patterns, max_lines, overlap)
+        return treesitter.attach_refs(chunks, _regex_calls(lines)) if language in CODE_LANGUAGES else chunks
     return _windows(path, lines, 1, len(lines), language, "block", None, max_lines, overlap)
 
 
 # --------------------------------------------------------------------------- python
+
+_Definition = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
 
 
 def _chunk_python(path, source, lines, max_lines, overlap) -> list[Chunk] | None:
@@ -181,11 +197,11 @@ def _chunk_python(path, source, lines, max_lines, overlap) -> list[Chunk] | None
     covered: set[int] = set()
     definitions = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
-    def start_of(node: ast.AST) -> int:
+    def start_of(node: _Definition) -> int:
         decorators = getattr(node, "decorator_list", [])
         return min([node.lineno] + [d.lineno for d in decorators])
 
-    def emit(node: ast.AST, qualname: str, kind: str) -> None:
+    def emit(node: _Definition, qualname: str, kind: str) -> None:
         """Emit a definition as one chunk; if it is too long, split it into its nested
         definitions (methods, inner functions) plus the code around them."""
         start, end = start_of(node), node.end_lineno or node.lineno
@@ -213,7 +229,19 @@ def _chunk_python(path, source, lines, max_lines, overlap) -> list[Chunk] | None
     # Whatever is left (imports, constants, script code) becomes "module" chunks.
     chunks.extend(_leftover_chunks(path, lines, covered, "python", max_lines, overlap))
     chunks.sort(key=lambda c: (c.start_line, c.end_line))
-    return chunks
+    return treesitter.attach_refs(chunks, _python_calls(tree))
+
+
+def _python_calls(tree: ast.AST) -> list[tuple[int, str]]:
+    """(line, name) for every call: ``f()`` -> f, ``obj.method()`` -> method."""
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if name:
+                calls.append((node.lineno, name))
+    return calls
 
 
 def _leftover_chunks(
@@ -283,6 +311,24 @@ def _chunk_by_patterns(path, lines, language, patterns, max_lines, overlap) -> l
         seg_kind = kind if name else "module"
         chunks.extend(_windows(path, lines, start, end, language, seg_kind, name, max_lines, overlap))
     return chunks
+
+
+CODE_LANGUAGES = set(DEFINITION_PATTERNS) - {"markdown", "sql"}
+_CALL = re.compile(r"(?<![\w$])([A-Za-z_$][\w$]*)\s*\(")
+_NOT_CALLS = {
+    "if", "for", "while", "switch", "catch", "return", "function", "fn", "func", "def", "match",
+    "sizeof", "typeof", "new", "await", "yield", "elif", "when", "using", "lock", "foreach",
+}  # fmt: skip
+
+
+def _regex_calls(lines: list[str]) -> list[tuple[int, str]]:
+    """Best-effort call names when no parser is available: ``name(`` minus keywords."""
+    return [
+        (i, m.group(1))
+        for i, line in enumerate(lines, start=1)
+        for m in _CALL.finditer(line)
+        if m.group(1) not in _NOT_CALLS
+    ]
 
 
 # --------------------------------------------------------------------------- windows

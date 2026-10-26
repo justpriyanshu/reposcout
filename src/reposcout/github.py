@@ -7,6 +7,7 @@ import hmac
 import logging
 import re
 from dataclasses import dataclass
+from urllib.parse import quote
 
 import httpx
 
@@ -97,6 +98,26 @@ class GitHubClient:
         if resp.status_code >= 400:
             raise GitHubError(f"GitHub error {resp.status_code}: {resp.text[:300]}")
         return resp.json()
+
+    def file_at(self, repo_full_name: str, sha: str, path: str, max_bytes: int = 400_000) -> str | None:
+        """A file's text at a commit (for scanners that read whole files), or None."""
+        resp = self._request(
+            "GET",
+            f"/repos/{repo_full_name}/contents/{quote(path)}?ref={quote(sha)}",
+            accept="application/vnd.github.raw",
+        )
+        if resp.status_code >= 400 or len(resp.content) > max_bytes:
+            return None
+        return resp.content.decode("utf-8", "replace")
+
+    def source_loader(self, pr: dict):
+        """Loads changed files at the pull request's head commit (works for forks too)."""
+        head = pr.get("head") or {}
+        repo = (head.get("repo") or {}).get("full_name")
+        sha = head.get("sha")
+        if not repo or not sha:
+            return None
+        return lambda path: self.file_at(repo, sha, path)
 
     def get_pull_request_diff(self, pr: PullRequestRef) -> str:
         resp = self._request(

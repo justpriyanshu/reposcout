@@ -9,14 +9,17 @@ from .config import Settings
 from .embeddings import Embedder, make_embedder
 from .indexer import Indexer
 from .llm import LLM, make_llm
+from .observability import traced
+from .rerank import make_reranker
 from .review import Reviewer, Severity
-from .store import IndexStore
+from .review.scanners import make_scanners
+from .store import BaseStore, IndexStore
 
 
 @dataclass
 class Services:
     settings: Settings
-    store: IndexStore
+    store: BaseStore
     embedder: Embedder
     llm: LLM | None
     assistant: RepoAssistant
@@ -35,12 +38,21 @@ def build_services(
 ) -> Services:
     store = IndexStore(settings.index_path)
     embedder = make_embedder(settings)
-    llm = make_llm(settings) if use_llm else None
-    assistant = RepoAssistant(store, embedder, llm, settings.top_k, settings.max_context_chars)
+    llm = traced(make_llm(settings)) if use_llm else None
+    assistant = RepoAssistant(
+        store,
+        embedder,
+        llm,
+        settings.top_k,
+        settings.max_context_chars,
+        reranker=make_reranker(settings),
+        rerank_candidates=settings.rerank_candidates,
+    )
     reviewer = Reviewer(
         llm,
         assistant if use_context else None,
         min_severity=min_severity,
         workers=max(1, settings.review_workers),
+        scanners=make_scanners(settings.scanners),
     )
     return Services(settings, store, embedder, llm, assistant, reviewer)
