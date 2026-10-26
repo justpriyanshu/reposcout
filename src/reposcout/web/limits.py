@@ -1,44 +1,37 @@
-"""Small in-memory limits: per-visitor rate limits and caps on concurrent work."""
+"""Per-visitor rate limits and caps on concurrent work.
+
+Rate limits use the ``limits`` library (the engine behind slowapi) with a moving window.
+Counters live in memory by default, which is right for a single server; point
+``REPOSCOUT_RATE_LIMIT_STORAGE`` at ``redis://...`` (with the ``redis`` package installed)
+to share them between several processes or servers.
+"""
 
 from __future__ import annotations
 
 import threading
 import time
-from collections import defaultdict, deque
 from contextlib import contextmanager
+
+from limits import RateLimitItemPerSecond, storage, strategies
 
 
 class RateLimiter:
-    """Sliding-window limit of ``limit`` hits per ``window_seconds`` for each key."""
+    """Moving-window limit of ``limit`` hits per ``window_seconds`` for each key."""
 
-    PRUNE_EVERY = 1000  # hits between sweeps of visitors who have gone quiet
-
-    def __init__(self, limit: int, window_seconds: float):
+    def __init__(self, limit: int, window_seconds: float, storage_uri: str = "memory://", name: str = ""):
         self.limit = limit
         self.window = window_seconds
-        self._hits: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = threading.Lock()
-        self._since_prune = 0
+        self.item = RateLimitItemPerSecond(limit, max(1, int(window_seconds)))
+        self.storage = storage.storage_from_string(storage_uri)
+        self.strategy = strategies.MovingWindowRateLimiter(self.storage)
+        self.namespace = f"reposcout:{name or 'limit'}"
 
     def check(self, key: str) -> float:
         """Record a hit. Returns 0 if allowed, otherwise seconds until the next free slot."""
-        now = time.monotonic()
-        with self._lock:
-            self._since_prune += 1
-            if self._since_prune >= self.PRUNE_EVERY:
-                self._since_prune = 0
-                for k in [k for k, v in self._hits.items() if not v or now - v[-1] > self.window]:
-                    del self._hits[k]
-            hits = self._hits[key]
-            while hits and now - hits[0] > self.window:
-                hits.popleft()
-            if len(hits) >= self.limit:
-                return max(1.0, self.window - (now - hits[0]))
-            hits.append(now)
+        if self.strategy.hit(self.item, self.namespace, key):
             return 0.0
-
-    def __len__(self) -> int:
-        return len(self._hits)
+        reset, _remaining = self.strategy.get_window_stats(self.item, self.namespace, key)
+        return max(1.0, reset - time.time())
 
 
 class Busy(Exception):

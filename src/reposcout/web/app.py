@@ -23,7 +23,10 @@ from ..assistant import RepoAssistant
 from ..embeddings import Embedder
 from ..errors import ProviderError, RepoScoutError
 from ..llm import OpenAICompatibleLLM
+from ..observability import TracedLLM, langfuse_client
+from ..rerank import Reranker
 from ..review import Reviewer, Severity
+from ..review.scanners import make_scanners
 from .config import PublicSettings
 from .github_public import GitHubAPIError, PublicGitHub
 from .limits import Busy, ConcurrencyLimit, RateLimiter
@@ -141,15 +144,18 @@ def create_public_app(
     embedder: Embedder,
     github: PublicGitHub,
     http: httpx.Client | None = None,
+    reranker: Reranker | None = None,
 ) -> FastAPI:
     app = FastAPI(title="RepoScout", version=__version__, docs_url="/api/docs", redoc_url=None)
     app.add_middleware(BodySizeLimit, max_bytes=MAX_BODY_BYTES)
     http = http or httpx.Client(timeout=settings.request_timeout)
-    index_limiter = RateLimiter(settings.index_per_hour, 3600)
-    llm_limiter = RateLimiter(settings.llm_per_10min, 600)
-    search_limiter = RateLimiter(settings.search_per_10min, 600)
+    store = settings.rate_limit_storage
+    index_limiter = RateLimiter(settings.index_per_hour, 3600, store, "index")
+    llm_limiter = RateLimiter(settings.llm_per_10min, 600, store, "llm")
+    search_limiter = RateLimiter(settings.search_per_10min, 600, store, "search")
     llm_slots = ConcurrencyLimit(settings.max_concurrent_llm, per_key=1)
     search_slots = ConcurrencyLimit(settings.max_concurrent_search, per_key=2)
+    scanners = make_scanners()
     key_cache: dict[str, float] = {}
     key_lock = Lock()
 
@@ -193,7 +199,7 @@ def create_public_app(
                 wait,
             )
 
-    def user_llm(request: Request) -> OpenAICompatibleLLM:
+    def user_llm(request: Request) -> OpenAICompatibleLLM | TracedLLM:
         key = request.headers.get("x-llm-key", "").strip()
         if not key:
             raise ApiError(
@@ -202,7 +208,7 @@ def create_public_app(
         model = request.headers.get("x-llm-model", "").strip() or settings.default_model
         if not MODEL_RE.match(model):
             raise ApiError(400, "bad_model", "That model name isn't valid.")
-        return OpenAICompatibleLLM(
+        llm = OpenAICompatibleLLM(
             model,
             settings.llm_base_url,
             key,
@@ -211,6 +217,9 @@ def create_public_app(
             retry_attempts=PUBLIC_RETRY_ATTEMPTS,
             max_retry_wait=PUBLIC_MAX_RETRY_WAIT,
         )
+        # Visitors' prompts are only traced when the operator opts in (see observability.py).
+        client = langfuse_client() if settings.trace_public else None
+        return TracedLLM(llm, client) if client is not None else llm
 
     def list_models(key: str) -> list[str]:
         try:
@@ -228,7 +237,7 @@ def create_public_app(
         ids = [m.get("id", "") for m in resp.json().get("data", []) if m.get("active", True)]
         return sorted({i for i in ids if i and not NOT_CHAT_MODELS.search(i)})
 
-    def check_key(llm: OpenAICompatibleLLM) -> None:
+    def check_key(llm: OpenAICompatibleLLM | TracedLLM) -> None:
         """Validate a key once per 10 minutes before long jobs (reviews swallow LLM errors)."""
         token = llm.headers.get("Authorization", "")
         digest = hashlib.sha256(token.encode()).hexdigest()
@@ -252,7 +261,13 @@ def create_public_app(
         workspace.touch(repo)
         repo = RepoId(record["owner"], record["name"])
         assistant = RepoAssistant(
-            store, embedder, None, settings.top_k, settings.max_context_chars, repo_name=repo.full_name
+            store,
+            embedder,
+            None,
+            settings.top_k,
+            settings.max_context_chars,
+            repo_name=repo.full_name,
+            reranker=reranker,
         )
         return repo, record, assistant
 
@@ -416,7 +431,7 @@ def create_public_app(
         with _Slot(llm_slots, request):
             return run_review(req, link, llm)
 
-    def run_review(req: ReviewRequest, link, llm: OpenAICompatibleLLM) -> dict:
+    def run_review(req: ReviewRequest, link, llm: OpenAICompatibleLLM | TracedLLM) -> dict:
         check_key(llm)
         try:
             pr = github.pull(link.repo, link.pull)
@@ -451,14 +466,26 @@ def create_public_app(
         store = workspace.store(repo)
         if record and record["ready"] and store is not None:
             context = RepoAssistant(
-                store, embedder, None, settings.top_k, settings.max_context_chars, repo_name=repo.full_name
+                store,
+                embedder,
+                None,
+                settings.top_k,
+                settings.max_context_chars,
+                repo_name=repo.full_name,
+                reranker=reranker,
             )
             workspace.touch(repo)
 
         reviewer = Reviewer(
-            llm, context, min_severity=req.min_severity, workers=max(1, settings.review_workers)
+            llm,
+            context,
+            min_severity=req.min_severity,
+            workers=max(1, settings.review_workers),
+            scanners=scanners,
         )
-        result = reviewer.review(diff, pr.get("title") or "", pr.get("body") or "")
+        result = reviewer.review(
+            diff, pr.get("title") or "", pr.get("body") or "", load_source=github.source_loader(pr)
+        )
         data = result.to_dict()
         for f in data["findings"]:
             f["url"] = pr_line_url(repo, link.pull, f["path"], f["line"])
@@ -485,12 +512,13 @@ def build_public_app(settings: PublicSettings | None = None, embedder: Embedder 
     """Wire everything from environment settings and start the indexing worker."""
     from ..config import Settings
     from ..embeddings import make_embedder
+    from ..rerank import make_reranker
 
     settings = settings or PublicSettings()
     embedder = embedder or make_embedder(Settings())
     github = PublicGitHub(settings.github_token, settings.github_api_url)
     workspace = Workspace(settings, embedder, github)
     workspace.start()
-    app = create_public_app(settings, workspace, embedder, github)
+    app = create_public_app(settings, workspace, embedder, github, reranker=make_reranker(Settings()))
     app.state.workspace = workspace
     return app
