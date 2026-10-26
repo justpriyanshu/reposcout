@@ -8,7 +8,9 @@ RepoScout indexes a code repository so you can ask questions about it in plain E
 
 ## 2. Indexing
 
-**Chunking follows code structure.** Embedding a whole file blurs many topics into one vector; fixed-size windows cut functions in half. Python files are parsed with `ast`, so each chunk is a complete function, method or class with its decorators. Definitions longer than the limit (80 lines by default) are split along their nested definitions (a big class becomes one chunk per method plus a "header" chunk; a big factory function becomes one chunk per inner function), and only code with no nested definitions falls back to overlapping windows. Other languages use regexes that recognise definition lines (`func`, `fn`, `class`, `export function`, Markdown headings...). This is cheaper than shipping parsers for every language, at the cost of coarser chunks for unusual formatting. Tree-sitter would be the next step.
+**Chunking follows code structure.** Embedding a whole file blurs many topics into one vector; fixed-size windows cut functions in half. Python files are parsed with `ast`, so each chunk is a complete function, method or class with its decorators. Definitions longer than the limit (80 lines by default) are split along their nested definitions (a big class becomes one chunk per method plus a "header" chunk; a big factory function becomes one chunk per inner function), and only code with no nested definitions falls back to overlapping windows. Thirteen other languages are parsed with tree-sitter (grammars from `tree-sitter-language-pack`, downloaded once and cached; Docker images include them). Each language's *tags query*, the same query GitHub's code navigation uses, marks definitions, and the chunker applies the same split-along-nested-definitions rule as for Python, starting each chunk at its `export`, decorator, attribute or doc comment. Markdown, SQL and shell, and any language whose grammar can't be loaded, use regexes that recognise definition lines (`func`, `fn`, `class`, `export function`, Markdown headings...): coarser for unusual formatting, but never a hard dependency.
+
+**A small symbol graph.** The tags queries also mark call sites (`@reference.call`); a syntax-tree walk fills in call shapes some queries miss (TypeScript's has none). Every chunk stores the names it calls in a `refs` table, so "which chunks call `verify_token`?" is an indexed lookup. It is name-based, not type-resolved like SCIP or a language server: two functions with the same name share callers. That keeps it language-agnostic and cheap, and the reviewer only uses it to pick context, where an extra snippet costs little.
 
 **Each chunk is embedded with a small header** (`File: path`, `Function: name`). The name and path carry a lot of meaning that the code body alone does not.
 
@@ -20,13 +22,17 @@ RepoScout indexes a code repository so you can ask questions about it in plain E
 
 ## 3. Storage and search
 
-**SQLite instead of a vector database.** One file holds chunk text, metadata, vectors (as float32 blobs) and an FTS5 full-text index. Vector search loads the matrix into NumPy once and does a single matrix-vector product, which is a few milliseconds for tens of thousands of chunks and fine up to a few hundred thousand. The trade-off: brute-force search is O(n) per query and the matrix lives in memory. Past that scale the store could switch to an approximate index (HNSW via FAISS or hnswlib) behind the same interface.
+**SQLite instead of a vector database.** One file holds chunk text, metadata, vectors (as float32 blobs), an FTS5 full-text index and, when the extension loads, a `sqlite-vec` index. sqlite-vec searches the vectors inside SQLite, in C, without loading them into Python, so memory stays flat as the index grows. Without the extension (some Python builds can't load extensions) the store loads the matrix into NumPy and does one matrix-vector product: a few milliseconds for tens of thousands of chunks. Both are exact searches; they return the same ranking (a test checks this). The float32 blobs stay the source of truth, so an index written without the extension is rebuilt into `chunks_vec` the next time it is opened with it. sqlite-vec's ANN indexes, or HNSW, would be the next step past a few hundred thousand chunks.
+
+**Postgres for the public app.** Render's free plan wipes its disk on every restart, so the public app can put its registry and every index in one Postgres database instead (`pg_store.py`, same `BaseStore` interface, e.g. Neon's free tier). Vectors are pgvector `halfvec` (half the storage of `vector`, which matters in a 0.5 GB free database) and keyword search is a `tsvector` with English stemming and a GIN index. Search is exact within one repository (a B-tree on `index_id` narrows it to a few thousand rows): a global HNSW index would have to filter by repository after the approximate search, losing recall for no speed gain at this size. Each index is a *generation* row: a refresh builds a new one and the registry switches to it in one update; the old one is retired for a minute, so requests still reading it finish, then dropped. The queue of indexing jobs is the registry itself, so a restart picks up where it stopped. All the store and workspace tests run against both backends.
 
 **Hybrid search.** Embeddings find code that means the same thing with different words ("authenticate" vs `verify_token`); keyword search finds exact identifiers and rare terms that embeddings smear out. Both run, each returns its top 50, and the lists are merged.
 
 **Reciprocal Rank Fusion.** BM25 scores and cosine similarities are on different, query-dependent scales, so adding them needs fragile tuning. RRF ignores raw scores and uses ranks: `score = Σ 1 / (60 + rank)`. A chunk ranked well by both systems wins. It is simple, robust and a standard technique in search.
 
 **Keyword search details.** The FTS5 table uses the Porter stemmer (`retried` matches `retries`), and each chunk's indexed text also includes its identifiers split into words (`getUserById` → `get user by id`), so natural-language questions match code identifiers.
+
+**Optional reranking.** Hybrid search scores the query and each chunk separately. A cross-encoder reranker (Jina's API) reads them together, which judges relevance better, so it re-orders the top 30 candidates. It is off by default, costs a network round trip per search, and if the API fails the fused order is used: reranking may improve search but must never break it.
 
 **Source-first ranking.** Tests and documentation repeat the vocabulary of the code they describe, and often won the ranking for "how does X work" questions. Their fused score is multiplied by 0.5 (tests) or 0.6 (docs) unless the question mentions tests or docs. Measured on the bundled eval, recall@5 went from 0.55 to 0.80.
 
@@ -48,7 +54,9 @@ The top snippets are numbered and placed in the prompt within a character budget
 
 Rules run on every added line (with language filters, and some skipped in test files so fake passwords in fixtures are not flagged). The LLM reviews each file separately, which keeps prompts small and lets files be reviewed in parallel.
 
-**Cross-file context.** A diff alone hides the signatures and behaviour of the functions it calls. For each file, the reviewer extracts called names from the added lines, looks up their definitions in the index, tops up with a hybrid search, and adds up to three snippets marked "context only, do not review".
+**Cross-file context.** A diff alone hides the signatures and behaviour of the functions it calls, and the code that calls the functions it changes. For each file, the reviewer extracts called names from the added lines and looks up their definitions; finds the functions the diff modifies (definitions on added lines, plus the indexed chunks the added lines fall in) and looks up their callers in the symbol graph; then tops up with a hybrid search. Up to three snippets are added, marked "context only, do not review", with callers labelled "calls X" so the model checks whether the change breaks them.
+
+**Established scanners next to the rules.** Bandit reads the whole new version of each changed Python file (fetched from the working tree, or from GitHub at the PR's head commit), so it understands code rather than single lines; gitleaks matches about 200 provider-specific secret formats in the added lines. Their findings are filtered to added lines, labelled `rule:bandit-B602` or `rule:gitleaks-...`, and merged with the built-in rules (which win ties against the LLM). Semgrep is supported but off by default in the app: starting it takes seconds per file on a small server, so it runs over the whole codebase in CI instead. A scanner that is missing or crashes is skipped; it never fails a review.
 
 **Guarding against bad model output.**
 1. The prompt prints line numbers next to each diff line and asks for JSON in a fixed shape (JSON mode is enabled when the provider supports it, with an automatic fallback when it does not).
@@ -70,6 +78,9 @@ Every drop is counted (`dropped_invalid`, `dropped_off_diff`, `snapped_lines`, `
 ## 7. Reliability details
 
 - HTTP clients retry 429 and 5xx responses with exponential backoff and honour `Retry-After`.
+- Free LLM tiers change their limits often, so `REPOSCOUT_LLM_FALLBACKS` chains providers (Groq → Gemini → OpenRouter...). With fallbacks configured, each model gives up after two quick attempts instead of waiting out a rate limit, and the next one answers. It is a small wrapper rather than LiteLLM, whose size matters on a 512 MB server; all these providers speak the OpenAI API anyway.
+- Rate limits use the `limits` library (slowapi's engine) with a moving window; counters are in memory for one server and can move to Redis with one setting.
+- Optional monitoring: Sentry for errors (visitors' API keys and request bodies are stripped before sending) and Langfuse for LLM traces (prompt, answer, tokens, latency; built on OpenTelemetry). Visitors' prompts in the public app are only traced when the operator opts in.
 - Clear, actionable errors: "Ollama is not running", "run `ollama pull X`", "the index was built with a different model".
 - Per-route request counts, error counts and p50/p95 latency at `/stats`, plus LLM token usage.
 - The CLI's `--fail-on major` exit code lets the review act as a CI gate.
@@ -89,7 +100,7 @@ The eval datasets are excluded from the index (`.reposcoutignore`), because they
 
 **How do you stop the model from making things up?** Answers are constrained to numbered snippets with citations that are checked; the model is not called when retrieval finds nothing; review output must pass a schema and point at real diff lines; and evals measure false alarms on clean code.
 
-**What would you change to scale to a monorepo with millions of lines?** Replace brute-force vector search with an ANN index, move embedding into a batched background queue, shard the index per directory or service, and use tree-sitter for precise chunking in every language.
+**What would you change to scale to a monorepo with millions of lines?** Switch the exact vector search to an ANN index (sqlite-vec's or pgvector's HNSW), move embedding into a batched background queue with workers, shard the index per directory or service, and make the symbol graph type-aware (SCIP indexes from each language's compiler).
 
 **Why RRF instead of a weighted sum of scores?** The two score types are not comparable and their ranges change from query to query; rank-based fusion needs no calibration and is hard to break.
 
